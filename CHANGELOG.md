@@ -3,6 +3,17 @@
 All notable changes to POPR. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [SemVer](https://semver.org/).
 
+## [1.6.0] - 2026-09-10
+
+### Fixed
+- **A long project name pushed the status off the banner.** On one fixed line, a name like `a-really-long-monorepo-package-name · feature/some-branch` ran to 104 characters and clipped the seven word status entirely — the one thing that must always be readable. Title and status are now budgeted separately: the status keeps the width it needs and the name gives way.
+- **A banner that failed to draw took the notification with it.** It was launched detached with its output discarded, so a failure was silent and you simply got nothing. POPR now reads the outcome and falls back to a macOS notification when the banner errors *or* dies without printing anything at all, which is how both of this project's worst bugs presented. Both shapes have tests, using a deliberately broken banner.
+
+### Added
+- **VoiceOver.** A borderless non-activating panel is invisible to screen readers, which made POPR strictly worse than the notification it replaced for anyone using one. Banners are now announced.
+- Hostile input tests: a project directory containing spaces, semicolons, quotes and `$(...)` cannot execute anything through the click command, and banner text is never evaluated as shell. Plus 300 character names, empty status and unicode.
+- `POPR_LOG`, so the log can be redirected — which is what makes the fallback testable.
+
 ## [1.5.0] - 2026-09-10
 
 Acting on an honest reading of what was weakest.

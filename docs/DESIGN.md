@@ -221,6 +221,17 @@ machine where `osascript` is unavailable.
 1. `someNSColor.CGColor` returns a pointer owned by a temporary. The first use survives by luck and the *second* crashes the process with no error, no output, and no stack. Nothing in that file touches `CGColor`; `NSBox` takes `NSColor` directly.
 2. `addSubview` on an `NSBox` goes into its `contentView`, which is inset by `contentViewMargins`. Every child then sits shifted by an amount that appears in no coordinate you wrote. The root is a plain `NSView` with the box as its first subview.
 
+Title and status are budgeted rather than concatenated: on one fixed line a long
+monorepo name would clip the status away, and the status is why the banner
+exists. The banner is also announced to VoiceOver, since a borderless
+non-activating panel is otherwise invisible to it, and replacing an accessible
+notification with an inaccessible window would be a straight regression.
+
+If the banner cannot be drawn, POPR falls back to a macOS notification. It
+detects failure from the outcome string *and* from empty output, because a JXA
+bridge failure kills the process without printing anything, which is exactly how
+this project's two worst bugs presented.
+
 Vertical placement of the text is a measured constant, not a derived one:
 `NSTextField` does not put a single line where its `fittingSize` implies. It was
 calibrated by rendering the same banner at a range of offsets, screenshotting,

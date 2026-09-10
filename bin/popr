@@ -19,11 +19,11 @@
 # See `popr help` for the keys.
 
 set -u
-VERSION="1.5.0"
+VERSION="1.6.0"
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:${PATH:-}"
 
 MODE="${1:-stop}"
-LOG_FILE="$HOME/Library/Logs/popr.log"
+LOG_FILE="${POPR_LOG:-$HOME/Library/Logs/popr.log}"
 CONFIG_FILE="${POPR_CONFIG:-$HOME/.config/popr/config.json}"
 CLAUDE_DIR="${POPR_CLAUDE_DIR:-$HOME/.claude}"
 SETTINGS_FILE="$CLAUDE_DIR/settings.json"
@@ -344,10 +344,32 @@ notify() {
         # shell waits for it, and a banner that lives until you click it would
         # hang `popr install` and, far worse, the hook itself.
         (
-            osascript -l JavaScript "$BANNER_JS" "$title" "$line" \
+            # Capture the result rather than discarding it. The banner returns
+            # 'clicked' or 'timeout' when it worked, its own error string when it
+            # threw, and NOTHING AT ALL when the JXA bridge kills the process
+            # outright, which is how both of this project's worst bugs presented.
+            # A silent failure here would mean no notification at all, so treat
+            # anything unexpected as a failure and fall back.
+            outcome="$(osascript -l JavaScript "$BANNER_JS" "$title" "$line" \
                 "$(opt banner_icon "")" "$slot" "$style" "$CLICK_CMD" \
                 "$(opt banner_seconds 900)" "$(opt font "")" \
-                "$BURST_DNA" "$(opt confetti_size 90)"
+                "$BURST_DNA" "$(opt confetti_size 90)" 2>&1)"
+            case "$outcome" in
+                clicked | timeout) ;;
+                *)
+                    log "banner failed (${outcome:-no output at all}), falling back"
+                    if [ -n "$NOTIFIER" ]; then
+                        "$NOTIFIER" -title "$title" -subtitle "$subtitle" -message "$message" \
+                            -group "$GROUP" -execute "$CLICK_CMD" >/dev/null 2>&1
+                    else
+                        osascript - "$title" "$subtitle" "$message" >/dev/null 2>&1 <<'OSA'
+on run argv
+  display notification (item 3 of argv) with title (item 1 of argv) subtitle (item 2 of argv)
+end run
+OSA
+                    fi
+                    ;;
+            esac
             rm -rf "$dir"
         ) </dev/null >/dev/null 2>&1 &
         printf '%s' "$!" >"$dir/pid" 2>/dev/null

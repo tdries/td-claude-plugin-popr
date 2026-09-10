@@ -278,8 +278,20 @@ function run(argv) {
     // ever cut off, however long Claude's last sentence happened to be.
     var textX = (img || dna) ? PAD + ICON + GAP : PAD;
     var textW = W - textX - PAD;
-    var line = message ? title + '   ' + message : title;
-    var field = label(line, 9.6, textColour, textW, family);   // 20% down from 12
+    // Two fields, budgeted. On one fixed line a long monorepo name would push
+    // the status off the end, and the status is the whole point of the banner.
+    // So the status keeps the width it needs and the name gives way.
+    var GUTTER = 14;
+    var titleField = label(title, 9.6, textColour, textW, family);
+    var statusField = message ? label(message, 9.6, textColour, textW, family) : null;
+
+    var titleW = Math.ceil(titleField.fittingSize.width);
+    var statusW = statusField ? Math.ceil(statusField.fittingSize.width) : 0;
+    if (statusField && titleW + GUTTER + statusW > textW) {
+        statusW = Math.min(statusW, Math.floor(textW * 0.62));
+        titleW = Math.max(Math.floor(textW * 0.22), textW - GUTTER - statusW);
+        statusW = textW - GUTTER - titleW;
+    }   // 20% down from 12
 
     // The screen the pointer is on, not "main". On a two screen desk the main
     // screen is wherever the menu bar lives, which is regularly not the one you
@@ -337,15 +349,32 @@ function run(argv) {
 
     // A pixel below true centre. The field's measured box includes room for
     // descenders the caps never use, so dead-centre reads as sitting high.
-    var fh = field.frame.size.height;
-    field.setFrame($.NSMakeRect(textX, Math.round((H - fh) / 2) + TEXT_NUDGE, textW, fh));
-    root.addSubview(field);
+    var fh = titleField.frame.size.height;
+    var ty = Math.round((H - fh) / 2) + TEXT_NUDGE;
+    titleField.setFrame($.NSMakeRect(textX, ty, titleW, fh));
+    root.addSubview(titleField);
+    if (statusField) {
+        statusField.setFrame($.NSMakeRect(textX + titleW + GUTTER, ty, statusW, fh));
+        root.addSubview(statusField);
+    }
 
     // a transparent catcher on top, so a click anywhere on the banner counts
     root.addSubview($.PoprClickCatcher.alloc.initWithFrame($.NSMakeRect(0, 0, W, H)));
 
     win.setContentView(root);
     win.orderFrontRegardless;
+
+    // A borderless non-activating panel is invisible to VoiceOver, which would
+    // make POPR strictly worse than the notification it replaced for anyone
+    // using it. Announce the banner so it is spoken like one.
+    try {
+        var ann = $.NSMutableDictionary.dictionary;
+        ann.setObjectForKey($(title + '. ' + message), $.NSAccessibilityAnnouncementKey);
+        ann.setObjectForKey($.NSNumber.numberWithInt(90), $.NSAccessibilityPriorityKey);
+        $.NSAccessibilityPostNotificationWithUserInfo(
+            $.NSApplication.sharedApplication,
+            $.NSAccessibilityAnnouncementRequestedNotification, ann);
+    } catch (ignored) { /* announcing is a bonus, never a reason to fail */ }
 
     function tick(s) {
         $.NSRunLoop.currentRunLoop.runUntilDate($.NSDate.dateWithTimeIntervalSinceNow(s));

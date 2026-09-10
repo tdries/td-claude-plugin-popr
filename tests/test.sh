@@ -271,7 +271,80 @@ else
     bad "slots · concurrent callers each claimed one" "none claimed"
 fi
 
-# 15 · version matches the packaged manifests
+# 15 · a project directory is attacker-adjacent data: it can hold spaces,
+#      semicolons, quotes and command substitutions, and it ends up inside a
+#      shell command that the click runs. It must arrive as one literal word.
+NASTY="$TMP/pwn\$(touch $TMP/EXECUTED); echo x"
+mkdir -p "$NASTY/.git"
+printf 'ref: refs/heads/main\n' >"$NASTY/.git/HEAD"
+out="$(printf '%s' '{"session_id":"n1"}' | CLAUDE_PROJECT_DIR="$NASTY" "$POPR" stop 2>&1)"
+if [ -f "$TMP/EXECUTED" ]; then
+    bad "click command · a directory name cannot execute anything" "substitution ran"
+else
+    ok "click command · a directory name cannot execute anything"
+fi
+absent "click command · metacharacters are escaped, not passed raw" "$out" "; echo x	"
+
+# 16 · the banner survives input people really do have: very long names, empty
+#      status, unicode, and text that looks like shell
+if command -v osascript >/dev/null 2>&1; then
+    bfails=0
+    long_title="✓ a-really-long-monorepo-package-name-that-people-actually-have · feature/a-long-branch"
+    while IFS='|' read -r ttl msg; do
+        [ -z "$ttl" ] && continue
+        r="$(osascript -l JavaScript "$ROOT/assets/banner.js" "$ttl" "$msg" "" 0 pill "" 0.3 "" "dna" 0 2>&1)"
+        case "$r" in timeout | clicked) ;; *) bfails=$((bfails + 1)); echo "       banner rejected [$ttl]: ${r:-no output}" ;; esac
+    done <<EOF
+$long_title|Deployed the release to staging
+✓ p · main|
+✓ Ünïcødé · ветка|Déployé sur la préproduction
+✓ x|\$(touch $TMP/BANNER_EXECUTED); rm -rf /
+✓ $(printf 'y%.0s' $(seq 1 300))|$(printf 'z%.0s' $(seq 1 300))
+EOF
+    if [ "$bfails" -eq 0 ]; then ok "banner · survives long, empty, unicode and shell-shaped input"; else
+        bad "banner · survives awkward input" "$bfails of 5 failed"
+    fi
+    if [ -f "$TMP/BANNER_EXECUTED" ]; then
+        bad "banner · text is never evaluated as shell" "it executed"
+    else
+        ok "banner · text is never evaluated as shell"
+    fi
+fi
+
+# 17 · when the banner cannot be drawn, the event must not vanish. Both of this
+#      project's worst bugs were silent, so the fallback gets a real test with a
+#      deliberately broken banner rather than a comment saying it is handled.
+FAKE_PKG="$TMP/broken"
+mkdir -p "$FAKE_PKG/bin" "$FAKE_PKG/assets"
+cp "$POPR" "$FAKE_PKG/bin/popr"
+printf 'function run() { throw new Error("deliberately broken"); }\n' >"$FAKE_PKG/assets/banner.js"
+FAKE_LOG="$TMP/fallback.log"
+POPR_DRY_RUN="" POPR_LOG="$FAKE_LOG" POPR_CONFETTI=false POPR_NATIVE=false \
+    POPR_CLAUDE_DIR="$TMP/home/.claude" POPR_STATE="$TMP/fbstate" \
+    CLAUDE_PROJECT_DIR="$PROJ" "$FAKE_PKG/bin/popr" test >/dev/null 2>&1
+sleep 2
+if grep -q "banner failed" "$FAKE_LOG" 2>/dev/null; then
+    ok "a banner that cannot be drawn falls back instead of vanishing"
+else
+    bad "a banner that cannot be drawn falls back" "nothing logged: $(cat "$FAKE_LOG" 2>/dev/null)"
+fi
+
+# and a banner that dies with no output at all, which is how the JXA bridge
+# failures actually presented, must be treated the same way
+printf 'ObjC.import("AppKit");\nfunction run() { $.NSApplication.sharedApplication.terminate(null); }\n' \
+    >"$FAKE_PKG/assets/banner.js"
+: >"$FAKE_LOG"
+POPR_DRY_RUN="" POPR_LOG="$FAKE_LOG" POPR_CONFETTI=false POPR_NATIVE=false \
+    POPR_CLAUDE_DIR="$TMP/home/.claude" POPR_STATE="$TMP/fbstate" \
+    CLAUDE_PROJECT_DIR="$PROJ" "$FAKE_PKG/bin/popr" test >/dev/null 2>&1
+sleep 2
+if grep -q "banner failed" "$FAKE_LOG" 2>/dev/null; then
+    ok "a banner that dies silently is caught too"
+else
+    bad "a banner that dies silently is caught" "nothing logged"
+fi
+
+# 18 · version matches the packaged manifests
 v="$("$POPR" version)"
 for m in "$ROOT/.claude-plugin/plugin.json" "$ROOT/packaging/npm/package.json"; do
     [ -f "$m" ] || continue

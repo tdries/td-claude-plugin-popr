@@ -43,6 +43,7 @@ clicking through to its own window.
 | **Self cleaning** | A session's banner vanishes the moment you prompt it again |
 | **Confetti DNA** | Every project gets its own mark and its own burst, from its name |
 | **Its own sounds** | Three low swells sharing one timbre, not a system chime |
+| **Reads aloud** | Announced to VoiceOver, so the banner is not worse than the notification it replaced |
 | **Nothing leaves** | No network calls, no telemetry. Ever. |
 
 ## Install
@@ -172,8 +173,18 @@ Claude Desktop, or a terminal. For an editor the click runs
 `open -a "<app>" "<project folder>"`, which raises the window that already has
 that folder open. For anything else it activates the app.
 
-**Never in your way.** All the slow work happens in a detached subshell and every
-code path exits 0, so a hook cannot slow down or break your turn.
+**Never in your way.** The banner outlives the process that launched it, so it is
+launched fully detached, stdio included, and every code path exits 0. A hook
+cannot be slowed down or broken by POPR. Measured at about 0.05s.
+
+**The status always survives.** On one fixed line a long monorepo name would
+push the status off the end, so the two are budgeted: the status keeps the width
+it needs and the project name gives way. The status is the point of the banner.
+
+**A banner that cannot be drawn does not vanish.** If the window fails, or dies
+without saying anything at all — which is how both of this project's worst bugs
+presented — POPR notices and falls back to a macOS notification rather than
+leaving you with nothing. Both failure shapes have tests.
 
 **POPR draws its own banners.** macOS gives no control over a notification
 banner. The layout is fixed. The icon comes from the app bundle and cannot be
