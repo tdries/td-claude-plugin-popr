@@ -1,0 +1,11 @@
+{
+  "name": "popr",
+  "owner": { "name": "Tim Dries", "url": "https://github.com/tdries" },
+  "plugins": [
+    {
+      "name": "popr",
+      "source": "./",
+      "description": "Clickable macOS notifications when a Claude Code session finishes, needs you, or hits an error"
+    }
+  ]
+}

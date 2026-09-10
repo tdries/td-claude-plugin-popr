@@ -1,0 +1,73 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+env:
+  # Surfaced as env because the `secrets` context cannot be used in a step `if`.
+  TAP_TOKEN: ${{ secrets.TAP_TOKEN }}
+  NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+jobs:
+  release:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Version matches the tag
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          for f in .claude-plugin/plugin.json packaging/npm/package.json; do
+            v="$(jq -r .version "$f")"
+            [ "$v" = "$tag" ] || { echo "::error::$f says $v, tag says $tag"; exit 1; }
+          done
+          v="$(bin/popr version)"
+          [ "$v" = "$tag" ] || { echo "::error::bin/popr says $v, tag says $tag"; exit 1; }
+
+      - name: Test
+        run: brew install jq terminal-notifier && tests/test.sh
+
+      - name: Build the double click zip
+        run: |
+          mkdir -p dist/POPR
+          rsync -a --exclude .git --exclude dist ./ dist/POPR/
+          mv "dist/POPR/packaging/Install POPR.command" dist/POPR/
+          (cd dist && zip -qr "POPR-${GITHUB_REF_NAME}.zip" POPR)
+          shasum -a 256 "dist/POPR-${GITHUB_REF_NAME}.zip" | tee dist/checksums.txt
+
+      - name: Publish the release
+        run: gh release create "$GITHUB_REF_NAME" --generate-notes dist/*.zip dist/checksums.txt
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      # Conditional so the first release succeeds before the tap and npm exist.
+      - name: Bump the Homebrew tap
+        if: ${{ env.TAP_TOKEN != '' }}
+        env:
+          GH_TOKEN: ${{ secrets.TAP_TOKEN }}
+        run: |
+          tag="$GITHUB_REF_NAME"
+          url="https://github.com/${GITHUB_REPOSITORY}/archive/refs/tags/${tag}.tar.gz"
+          sha="$(curl -fsSL "$url" | shasum -a 256 | cut -d' ' -f1)"
+          git clone "https://x-access-token:${GH_TOKEN}@github.com/tdries/homebrew-tap.git" tap
+          mkdir -p tap/Formula
+          sed -e "s|^  url .*|  url \"${url}\"|" -e "s|^  sha256 .*|  sha256 \"${sha}\"|" \
+            packaging/popr.rb > tap/Formula/popr.rb
+          cd tap
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -am "popr ${tag}" && git push || echo "formula already current"
+
+      - name: Publish to npm
+        if: ${{ env.NPM_TOKEN != '' }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          mkdir -p packaging/npm/payload
+          rsync -a --exclude .git --exclude packaging --exclude dist ./ packaging/npm/payload/
+          echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" > ~/.npmrc
+          (cd packaging/npm && npm publish --access public)

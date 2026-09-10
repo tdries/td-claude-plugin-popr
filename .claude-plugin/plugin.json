@@ -1,0 +1,60 @@
+{
+  "name": "popr",
+  "displayName": "POPR",
+  "version": "1.0.0",
+  "description": "Hear and see a clickable macOS notification when a Claude Code session finishes, needs your input, or hits an error. Click it to jump back to the right window.",
+  "author": { "name": "Tim Dries", "url": "https://github.com/tdries" },
+  "homepage": "https://github.com/tdries/td-claude-plugin-popr",
+  "license": "MIT",
+  "keywords": ["notifications", "macos", "vscode", "hooks", "sessions", "productivity"],
+  "userConfig": {
+    "sound_done": {
+      "type": "string",
+      "title": "Done sound",
+      "description": "macOS sound name (Glass, Hero, Ping, Pop, Submarine, Funk, Tink), a full path to an audio file, or none to mute.",
+      "default": "Glass"
+    },
+    "sound_attention": {
+      "type": "string",
+      "title": "Needs input sound",
+      "description": "Sound when Claude waits for a permission or your input. Use none to mute.",
+      "default": "Ping"
+    },
+    "sound_error": {
+      "type": "string",
+      "title": "Error sound",
+      "description": "Sound when the turn stops on an API error. Use none to mute.",
+      "default": "Basso"
+    },
+    "volume": {
+      "type": "string",
+      "title": "Volume",
+      "description": "0 to 1.",
+      "default": "1"
+    },
+    "speak": {
+      "type": "boolean",
+      "title": "Say the project name",
+      "description": "Also speak which project finished, handy when you run many sessions.",
+      "default": false
+    },
+    "quiet_when_focused": {
+      "type": "boolean",
+      "title": "Quiet when the editor is in front",
+      "description": "Skip the alert when the target app is already frontmost.",
+      "default": false
+    },
+    "app": {
+      "type": "string",
+      "title": "Force the target app",
+      "description": "Leave empty to autodetect. Example: Cursor.",
+      "default": ""
+    },
+    "icon": {
+      "type": "string",
+      "title": "Banner picture",
+      "description": "Full path to a PNG. Leave empty for the POPR confetti, app for the editor icon, none to hide it.",
+      "default": ""
+    }
+  }
+}

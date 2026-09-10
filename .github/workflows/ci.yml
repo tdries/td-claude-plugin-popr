@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: brew install shellcheck jq terminal-notifier
+
+      - name: Lint
+        run: shellcheck bin/popr install.sh tests/test.sh "packaging/Install POPR.command"
+
+      - name: Validate JSON
+        run: |
+          for f in .claude-plugin/*.json hooks/hooks.json packaging/npm/package.json; do
+            jq -e . "$f" > /dev/null && echo "ok $f"
+          done
+
+      - name: Logo is reproducible from its source grid
+        run: |
+          python3 assets/make_logo.py --demo
+          python3 assets/make_logo.py
+          git diff --exit-code assets/logo.svg
+
+      - name: Test
+        run: tests/test.sh

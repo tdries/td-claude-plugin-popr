@@ -1,0 +1,526 @@
+#!/bin/bash
+# POPR · clickable macOS notifications for Claude Code sessions
+#
+# Hook modes (wired by `popr install` or by hooks/hooks.json as a plugin):
+#   popr stop        Claude finished a turn
+#   popr attention   Claude wants a permission or your input
+#   popr error       The turn ended on an API error
+#   popr clear       You sent a new prompt, drop this session's stale banner
+#
+# By hand:
+#   popr install [--force]   register the hooks in ~/.claude/settings.json
+#   popr uninstall           remove them again
+#   popr config              interactive settings
+#   popr test                fire a test notification
+#   popr doctor              health check
+#   popr version | help
+#
+# Settings resolve POPR_<KEY> > CLAUDE_PLUGIN_OPTION_<KEY> > config file > default.
+# See `popr help` for the keys.
+
+set -u
+VERSION="1.0.0"
+export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:${PATH:-}"
+
+MODE="${1:-stop}"
+LOG_FILE="$HOME/Library/Logs/popr.log"
+CONFIG_FILE="${POPR_CONFIG:-$HOME/.config/popr/config.json}"
+SETTINGS_FILE="$HOME/.claude/settings.json"
+DRY="${POPR_DRY_RUN:-}"
+
+has() { command -v "$1" >/dev/null 2>&1; }
+lower() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
+is_true() { case "$(lower "$1")" in 1 | true | yes | on) return 0 ;; esac; return 1; }
+
+# ---------------------------------------------------------------- own location
+# Resolve $0 through symlinks before deriving the package root. Homebrew and the
+# curl installer both expose bin/popr as a symlink, and a naive dirname would
+# land on /opt/homebrew, losing the bundled icon.
+SELF="${BASH_SOURCE[0]:-$0}"
+while [ -L "$SELF" ]; do
+    self_dir="$(cd -P "$(dirname "$SELF")" && pwd)"
+    SELF="$(readlink "$SELF")"
+    case "$SELF" in /*) ;; *) SELF="$self_dir/$SELF" ;; esac
+done
+SCRIPT_PATH="$(cd -P "$(dirname "$SELF")" && pwd)/$(basename "$SELF")"
+ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd -P "$(dirname "$SELF")/.." && pwd)}"
+
+# ---------------------------------------------------------------- settings
+CONFIG_JSON=""
+[ -f "$CONFIG_FILE" ] && CONFIG_JSON="$(cat "$CONFIG_FILE" 2>/dev/null)"
+
+opt() {
+    local key upper v
+    key="$1"
+    upper="$(printf '%s' "$key" | tr '[:lower:]' '[:upper:]')"
+    v="$(printenv "POPR_$upper" 2>/dev/null || true)"
+    [ -z "$v" ] && v="$(printenv "CLAUDE_PLUGIN_OPTION_$upper" 2>/dev/null || true)"
+    if [ -z "$v" ] && [ -n "$CONFIG_JSON" ] && has jq; then
+        # has($k) rather than `// empty`, which would swallow a stored `false`.
+        v="$(printf '%s' "$CONFIG_JSON" |
+            jq -r --arg k "$key" 'if has($k) and .[$k] != null then (.[$k]|tostring) else empty end' 2>/dev/null)"
+    fi
+    [ -z "$v" ] && v="$2"
+    printf '%s' "$v"
+}
+
+log() {
+    mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null || return 0
+    if [ -f "$LOG_FILE" ] && [ "$(stat -f%z "$LOG_FILE" 2>/dev/null || echo 0)" -gt 262144 ]; then
+        mv -f "$LOG_FILE" "$LOG_FILE.1" 2>/dev/null
+    fi
+    printf '%s [%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$MODE" "$*" >>"$LOG_FILE" 2>/dev/null
+}
+
+# Collapse to one line and strip leading characters terminal-notifier would
+# misread. A message starting with "-" would otherwise be parsed as a flag.
+clean() {
+    local s
+    s="$(printf '%s' "$1" | tr -s '[:space:]' ' ')"
+    while :; do
+        case "$s" in
+            [[:space:]]* | '"'* | '('* | '['* | '{'* | -*) s="${s#?}" ;;
+            *) break ;;
+        esac
+    done
+    printf '%s' "$s"
+}
+
+# ---------------------------------------------------------------- hook input
+INPUT="{}"
+case "$MODE" in
+    test | doctor | install | uninstall | config | version | help | -h | --help) ;;
+    *) [ -t 0 ] || INPUT="$(cat)" ;;
+esac
+[ -n "$INPUT" ] || INPUT="{}"
+
+jget() {
+    has jq || return 0
+    printf '%s' "$INPUT" | jq -r "($1)"' | select(type == "string" or type == "number")' 2>/dev/null | head -n 1
+}
+
+SESSION_ID="$(jget '.session_id')"
+SESSION_ID="${SESSION_ID:-manual}"
+CWD="$(jget '.cwd')"
+TRANSCRIPT="$(jget '.transcript_path')"
+PROJECT_DIR="${CLAUDE_PROJECT_DIR:-${CWD:-$PWD}}"
+PROJECT_NAME="$(basename "$PROJECT_DIR")"
+GROUP="popr-$SESSION_ID"
+
+BRANCH=""
+GITDIR="$PROJECT_DIR/.git"
+if [ -f "$GITDIR" ]; then # a worktree: .git is a file pointing elsewhere
+    GITDIR="$(sed -n 's/^gitdir: //p' "$GITDIR" 2>/dev/null)"
+    case "$GITDIR" in /*) ;; *) GITDIR="$PROJECT_DIR/$GITDIR" ;; esac
+fi
+[ -f "$GITDIR/HEAD" ] && BRANCH="$(sed -n 's#^ref: refs/heads/##p' "$GITDIR/HEAD" 2>/dev/null)"
+case "$GITDIR" in */.git/worktrees/*) PROJECT_NAME="$(basename "${GITDIR%%/.git/worktrees/*}")" ;; esac
+LABEL="$PROJECT_NAME"
+[ -n "$BRANCH" ] && LABEL="$PROJECT_NAME · $BRANCH"
+
+# ---------------------------------------------------------------- host app
+ENTRY="${CLAUDE_CODE_ENTRYPOINT:-}"
+if [ -z "$ENTRY" ] && [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ] && has jq; then
+    ENTRY="$(head -n 30 "$TRANSCRIPT" | jq -Rr 'fromjson? | .entrypoint // empty' 2>/dev/null | head -n 1)"
+fi
+
+# Walk up the process tree until we hit something living inside a .app bundle.
+find_host_app() {
+    local forced pid comm i=0
+    forced="$(opt app "")"
+    if [ -n "$forced" ]; then
+        case "$forced" in
+            /*) printf '%s' "$forced" ;;
+            *) printf '/Applications/%s.app' "${forced%.app}" ;;
+        esac
+        return 0
+    fi
+    case "$ENTRY" in *desktop*) printf '/Applications/Claude.app'; return 0 ;; esac
+    pid=$$
+    while [ -n "$pid" ] && [ "$pid" -gt 1 ] 2>/dev/null && [ "$i" -lt 30 ]; do
+        comm="$(ps -o comm= -p "$pid" 2>/dev/null)"
+        case "$comm" in
+            *.app/*) printf '%s.app' "${comm%%.app/*}"; return 0 ;;
+        esac
+        pid="$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ')"
+        i=$((i + 1))
+    done
+    return 0
+}
+
+HOST_APP="$(find_host_app)"
+[ -n "$HOST_APP" ] || HOST_APP="/Applications/Visual Studio Code.app"
+APP_NAME="$(basename "$HOST_APP" .app)"
+OPEN_TARGET="$HOST_APP"
+[ -d "$HOST_APP" ] || OPEN_TARGET="$APP_NAME"
+
+case "$APP_NAME" in
+    "Visual Studio Code") WHERE="VS Code" ;;
+    Claude) WHERE="Claude Desktop" ;;
+    *) WHERE="$APP_NAME" ;;
+esac
+case "$APP_NAME" in
+    *"Visual Studio Code"* | Code* | *Cursor* | *Windsurf* | *VSCodium* | *Kiro* | *Trae*) IS_EDITOR=1 ;;
+    *) IS_EDITOR=0 ;;
+esac
+
+# For an editor, opening the project folder raises the window that already has
+# it open. For anything else, just activate the app.
+if [ "$IS_EDITOR" = 1 ] && [ -d "$PROJECT_DIR" ]; then
+    CLICK_CMD="open -a $(printf '%q' "$OPEN_TARGET") $(printf '%q' "$PROJECT_DIR")"
+else
+    CLICK_CMD="open -a $(printf '%q' "$OPEN_TARGET")"
+fi
+
+APP_ICON=""
+if [ -d "$HOST_APP" ] && has defaults; then
+    icon_file="$(defaults read "$HOST_APP/Contents/Info" CFBundleIconFile 2>/dev/null)"
+    if [ -n "$icon_file" ]; then
+        case "$icon_file" in *.icns) ;; *) icon_file="$icon_file.icns" ;; esac
+        [ -f "$HOST_APP/Contents/Resources/$icon_file" ] && APP_ICON="$HOST_APP/Contents/Resources/$icon_file"
+    fi
+fi
+
+pick_icon() {
+    local o f
+    o="$(opt icon "")"
+    case "$(lower "$o")" in
+        none | off | false) return 0 ;;
+        app) printf '%s' "$APP_ICON"; return 0 ;;
+        "") ;;
+        *) if [ -f "$o" ]; then printf '%s' "$o"; return 0; fi ;;
+    esac
+    for f in "$ROOT/assets/custom.png" "$ROOT/assets/popr-256.png"; do
+        [ -f "$f" ] && { printf '%s' "$f"; return 0; }
+    done
+    printf '%s' "$APP_ICON"
+}
+ICON="$(pick_icon)"
+
+# ---------------------------------------------------------------- output
+is_focused() {
+    has lsappinfo || return 1
+    local front
+    front="$(lsappinfo info -only bundlepath "$(lsappinfo front 2>/dev/null)" 2>/dev/null | awk -F'"' '{print $4}')"
+    [ -n "$front" ] && [ "$front" = "$HOST_APP" ]
+}
+
+play_sound() {
+    [ -n "$DRY" ] && return 0
+    local s="$1" f
+    case "$(lower "$s")" in "" | none | off | false | 0) return 0 ;; esac
+    case "$s" in
+        /*) f="$s" ;;
+        *) f="/System/Library/Sounds/$s.aiff" ;;
+    esac
+    [ -f "$f" ] || f="/System/Library/Sounds/Glass.aiff"
+    has afplay && (afplay -v "$(opt volume 1)" "$f" >/dev/null 2>&1 &)
+    return 0
+}
+
+speak() {
+    [ -n "$DRY" ] && return 0
+    is_true "$(opt speak false)" || return 0
+    has say && (say "$1" >/dev/null 2>&1 &)
+    return 0
+}
+
+notify() {
+    local title="$1" subtitle="$2" message="$3"
+    if [ -n "$DRY" ]; then
+        printf 'NOTIFY\ttitle=%s\tsubtitle=%s\tmessage=%s\tgroup=%s\ticon=%s\tclick=%s\n' \
+            "$title" "$subtitle" "$message" "$GROUP" "${ICON:-}" "$CLICK_CMD"
+        return 0
+    fi
+    if has terminal-notifier; then
+        local args=(-title "$title" -subtitle "$subtitle" -message "$message" -group "$GROUP" -execute "$CLICK_CMD")
+        [ -n "$ICON" ] && args+=(-contentImage "$ICON")
+        terminal-notifier "${args[@]}" >/dev/null 2>&1
+    else
+        osascript - "$title" "$subtitle" "$message" >/dev/null 2>&1 <<'OSA'
+on run argv
+  display notification (item 3 of argv) with title (item 1 of argv) subtitle (item 2 of argv)
+end run
+OSA
+    fi
+}
+
+# The last thing Claude said, from the hook payload if present, else the tail of
+# the transcript. Markdown stripped, capped at 140 chars.
+summary() {
+    has jq || return 0
+    local s=""
+    s="$(printf '%s' "$INPUT" | jq -r '.last_assistant_message | if type == "string" then . else empty end' 2>/dev/null)"
+    if [ -z "$s" ] && [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]; then
+        s="$(tail -n 400 "$TRANSCRIPT" | jq -Rrn '[inputs | fromjson? | select(.type == "assistant") | .message.content | if type == "array" then .[] else empty end | select(.type == "text") | .text] | last // empty' 2>/dev/null)"
+    fi
+    [ -n "$s" ] || return 0
+    s="$(clean "$(printf '%s' "$s" | tr -d '`*#>')")"
+    printf '%s' "$s" | jq -Rrs 'if length > 140 then .[0:139] + "…" else . end' 2>/dev/null
+}
+
+# ---------------------------------------------------------------- hook wiring
+# Any hook whose command runs bin/popr or bin/butlr. Butlr is POPR's predecessor;
+# leaving its hooks in place would double every banner.
+HOOK_PATTERN='/bin/(popr|butlr)'
+
+plugin_install_found() {
+    local d
+    for d in "$HOME"/.claude/plugins/*/popr "$HOME"/.claude/plugins/*/*/popr \
+        "$HOME"/.claude/plugins/marketplaces/*/popr "$HOME"/.claude/skills/popr; do
+        [ -d "$d" ] && [ "$d" != "$ROOT" ] && { printf '%s' "$d"; return 0; }
+    done
+    return 1
+}
+
+hooks_edit() { # $1 = add | remove
+    local tmp additions
+    has jq || { echo "popr: jq is required to edit ~/.claude/settings.json" >&2; return 1; }
+    mkdir -p "$(dirname "$SETTINGS_FILE")"
+    [ -f "$SETTINGS_FILE" ] || echo '{}' >"$SETTINGS_FILE"
+    cp "$SETTINGS_FILE" "$SETTINGS_FILE.popr-backup"
+
+    additions='{}'
+    if [ "$1" = add ]; then
+        additions="$(jq -n --arg c "\"$SCRIPT_PATH\"" '{
+      Stop:             [{hooks:[{type:"command",command:($c+" stop"),   timeout:10}]}],
+      Notification:     [{matcher:"permission_prompt|elicitation_dialog|elicitation_url_dialog|agent_needs_input",
+                          hooks:[{type:"command",command:($c+" attention"),timeout:10}]}],
+      StopFailure:      [{hooks:[{type:"command",command:($c+" error"),  timeout:10}]}],
+      UserPromptSubmit: [{hooks:[{type:"command",command:($c+" clear"),  timeout:5}]}]
+    }')"
+    fi
+
+    tmp="$(mktemp)"
+    jq --arg pat "$HOOK_PATTERN" --argjson add "$additions" '
+    .hooks = ((.hooks // {})
+      | with_entries(.value |= (
+          map(.hooks |= map(select(((.command // "") | test($pat)) | not)))
+          | map(select((.hooks | length) > 0))))
+      | with_entries(select((.value | length) > 0)))
+    | .hooks = (reduce ($add | to_entries[]) as $e (.hooks; .[$e.key] = ((.[$e.key] // []) + $e.value)))
+    | if (.hooks | length) == 0 then del(.hooks) else . end
+  ' "$SETTINGS_FILE" >"$tmp" 2>/dev/null || { rm -f "$tmp"; echo "popr: could not parse $SETTINGS_FILE" >&2; return 1; }
+    mv "$tmp" "$SETTINGS_FILE"
+    return 0
+}
+
+install_cmd() {
+    local force=0 existing
+    case "${2:-}" in --force) force=1 ;; esac
+    [ "$(uname)" = Darwin ] || { echo "POPR only runs on macOS." >&2; exit 1; }
+
+    if existing="$(plugin_install_found)" && [ "$force" -eq 0 ]; then
+        cat >&2 <<EOF
+✗ POPR is already installed as a Claude Code plugin:
+    $existing
+
+  Registering the hooks again would fire every notification twice.
+  Use the plugin, or remove it and rerun. To override: popr install --force
+EOF
+        exit 1
+    fi
+
+    for t in terminal-notifier jq; do
+        has "$t" && continue
+        if has brew; then
+            echo "→ installing $t"
+            brew install "$t"
+        else
+            echo "✗ $t is missing and Homebrew is not installed. See https://brew.sh" >&2
+            exit 1
+        fi
+    done
+
+    hooks_edit add || exit 1
+    echo "→ hooks registered in $SETTINGS_FILE (backup at $SETTINGS_FILE.popr-backup)"
+
+    if [ -d "$HOME/.claude/skills/butlr" ]; then
+        rm -rf "$HOME/.claude/skills/butlr"
+        echo "→ removed the old butlr plugin"
+    fi
+
+    "$SCRIPT_PATH" test
+    cat <<EOF
+
+✅ POPR installed
+
+Next:
+  1. System Settings › Notifications › terminal-notifier
+     Allow notifications: on · Banner style: Persistent
+  2. Reload your editor window so the new hooks are picked up.
+  3. popr config    to change sounds and behaviour
+     popr doctor    to check everything
+
+Log: $LOG_FILE
+EOF
+}
+
+uninstall_cmd() {
+    hooks_edit remove || exit 1
+    echo "→ POPR hooks removed from $SETTINGS_FILE"
+    echo "  The popr command itself is still installed; remove it with your package manager."
+}
+
+config_cmd() {
+    local f="$CONFIG_FILE" ans
+    mkdir -p "$(dirname "$f")"
+    echo "POPR settings → $f"
+    echo "Return keeps the shown value. Sound names: Basso Blow Bottle Frog Funk Glass"
+    echo "Hero Morse Ping Pop Purr Sosumi Submarine Tink, an audio file path, or none."
+    echo
+    ask() { # key label default
+        local d
+        d="$(opt "$1" "$3")"
+        printf '  %-24s [%s]: ' "$2" "$d" >&2
+        read -r ans </dev/tty || ans=""
+        printf '%s' "${ans:-$d}"
+    }
+    local done_s att_s err_s vol spk quiet icon app
+    done_s="$(ask sound_done "Done sound" Glass)"
+    att_s="$(ask sound_attention "Needs input sound" Ping)"
+    err_s="$(ask sound_error "Error sound" Basso)"
+    vol="$(ask volume "Volume 0 to 1" 1)"
+    spk="$(ask speak "Say the project name" false)"
+    quiet="$(ask quiet_when_focused "Quiet when app is in front" false)"
+    icon="$(ask icon "Banner picture (path/app/none)" "")"
+    app="$(ask app "Force target app (blank = auto)" "")"
+
+    jq -n --arg a "$done_s" --arg b "$att_s" --arg c "$err_s" --arg v "$vol" \
+        --arg s "$spk" --arg q "$quiet" --arg i "$icon" --arg p "$app" '
+    {sound_done:$a, sound_attention:$b, sound_error:$c, volume:($v|tonumber? // 1),
+     speak:($s|test("^(1|true|yes|on)$";"i")), quiet_when_focused:($q|test("^(1|true|yes|on)$";"i"))}
+    + (if $i == "" then {} else {icon:$i} end)
+    + (if $p == "" then {} else {app:$p} end)
+  ' >"$f"
+    echo
+    echo "→ written to $f"
+    cat "$f"
+}
+
+doctor() {
+    local t existing
+    echo "POPR doctor · v$VERSION"
+    printf '  %-20s %s\n' "macOS" "$(sw_vers -productVersion 2>/dev/null || echo unknown)"
+    for t in terminal-notifier jq afplay say lsappinfo; do
+        if has "$t"; then printf '  %-20s ok  %s\n' "$t" "$(command -v "$t")"; else printf '  %-20s MISSING\n' "$t"; fi
+    done
+    printf '  %-20s %s\n' "script" "$SCRIPT_PATH"
+    printf '  %-20s %s\n' "package root" "$ROOT"
+    printf '  %-20s %s\n' "host app" "$HOST_APP ($WHERE)"
+    printf '  %-20s %s\n' "project" "$LABEL"
+    printf '  %-20s %s\n' "click action" "$CLICK_CMD"
+    printf '  %-20s %s\n' "banner picture" "${ICON:-none}"
+    if [ -f "$CONFIG_FILE" ]; then
+        printf '  %-20s %s\n' "config" "$CONFIG_FILE"
+    else
+        printf '  %-20s %s\n' "config" "none yet, run: popr config"
+    fi
+    if grep -qE '/bin/popr' "$SETTINGS_FILE" 2>/dev/null; then
+        printf '  %-20s %s\n' "hooks" "ok, in $SETTINGS_FILE"
+    else
+        printf '  %-20s %s\n' "hooks" "not in settings.json (fine if installed as a plugin)"
+    fi
+    if existing="$(plugin_install_found)"; then
+        printf '  %-20s %s\n' "plugin install" "$existing"
+        grep -qE '/bin/popr' "$SETTINGS_FILE" 2>/dev/null &&
+            echo "  ⚠ DOUBLE REGISTRATION: both a plugin and settings.json hooks. Run: popr uninstall"
+    fi
+    if grep -qE '/bin/butlr' "$SETTINGS_FILE" 2>/dev/null; then
+        echo "  ⚠ leftover butlr hooks found. Run: popr install"
+    fi
+    printf '  %-20s %s\n' "log" "$LOG_FILE"
+    has terminal-notifier || echo "  fix: brew install terminal-notifier"
+    has jq || echo "  fix: brew install jq"
+    echo "  No banner? System Settings › Notifications › terminal-notifier: allow, style Persistent."
+    echo "  Focus modes silence it too."
+}
+
+usage() {
+    cat <<EOF
+POPR v$VERSION · clickable macOS notifications for Claude Code
+
+  popr install [--force]  register hooks in ~/.claude/settings.json
+  popr uninstall          remove them
+  popr config             interactive settings
+  popr test               fire a test notification
+  popr doctor             health check
+  popr version
+
+Settings (POPR_<KEY> env > plugin option > $CONFIG_FILE > default):
+  sound_done          Glass     macOS sound name, audio file path, or none
+  sound_attention     Ping
+  sound_error         Basso
+  volume              1         0 to 1
+  speak               false     also say the project name
+  quiet_when_focused  false     skip when the target app is already in front
+  app                 auto      force the target app, e.g. Cursor
+  icon                bundled   PNG path, "app" for the host icon, or none
+EOF
+}
+
+# ---------------------------------------------------------------- dispatch
+case "$MODE" in
+    version | --version | -v) echo "$VERSION"; exit 0 ;;
+    help | --help | -h) usage; exit 0 ;;
+    doctor) doctor; exit 0 ;;
+    install) install_cmd "$@"; exit 0 ;;
+    uninstall) uninstall_cmd; exit 0 ;;
+    config) config_cmd; exit 0 ;;
+    test)
+        play_sound "$(opt sound_done Glass)"
+        notify "POPR test · $LABEL" "Click me" "This should bring $WHERE to the front"
+        speak "POPR test for $PROJECT_NAME"
+        log "test fired for $LABEL in $WHERE"
+        echo "Test notification sent for $LABEL in $WHERE. Clicking it runs: $CLICK_CMD"
+        has terminal-notifier || echo "terminal-notifier is missing, so the click cannot jump back: brew install terminal-notifier"
+        exit 0
+        ;;
+    clear)
+        has terminal-notifier && (terminal-notifier -remove "$GROUP" >/dev/null 2>&1 &)
+        exit 0
+        ;;
+    stop | attention | error) ;;
+    *) echo "popr: unknown command '$MODE'. Try: popr help" >&2; exit 0 ;;
+esac
+
+log "hook fired: $MODE, $LABEL in $WHERE (entry: ${ENTRY:-none})"
+if is_true "$(opt quiet_when_focused false)" && is_focused; then
+    log "skipped, $WHERE is frontmost ($LABEL)"
+    exit 0
+fi
+
+# Everything slow happens detached, so Claude never waits on POPR.
+run() {
+    case "$MODE" in
+        stop)
+            [ -n "$DRY" ] || sleep 0.4
+            msg="$(summary)"
+            [ -n "$msg" ] || msg="Ready for your next prompt"
+            play_sound "$(opt sound_done Glass)"
+            notify "✅ $LABEL" "Done in $WHERE" "$msg"
+            speak "$PROJECT_NAME is done"
+            ;;
+        attention)
+            msg="$(clean "$(jget '.message')")"
+            [ -n "$msg" ] || msg="Claude is waiting for you"
+            play_sound "$(opt sound_attention Ping)"
+            notify "⏳ $LABEL" "Needs you in $WHERE" "$msg"
+            speak "$PROJECT_NAME needs you"
+            ;;
+        error)
+            err="$(clean "$(jget '.error_type // .error // .reason')")"
+            play_sound "$(opt sound_error Basso)"
+            notify "⚠️ $LABEL" "Stopped in $WHERE" "Claude hit an error${err:+: $err}"
+            speak "$PROJECT_NAME hit an error"
+            ;;
+    esac
+    log "$LABEL in $WHERE"
+}
+
+if [ -n "$DRY" ]; then
+    run # foreground, so tests can read stdout
+else
+    (run) </dev/null >/dev/null 2>&1 &
+fi
+exit 0
