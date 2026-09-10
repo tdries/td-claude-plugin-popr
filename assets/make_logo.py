@@ -174,6 +174,19 @@ def write_animated_svg(path, dur=3.0):
 
 BURST_PX, BURST_FRAMES, BURST_MS = 192, 28, 45
 
+# The explosion has its own palette, given by the owner. It is deliberately
+# separate from PALETTE: the logo is a mark that has to hold up on ivory and in
+# a settings list, while the burst is thrown over whatever happens to be on the
+# desktop and wants more contrast and less mid-tone.
+BURST_PALETTE = {
+    "o": "#C15F3C",  # burnt orange, carries the burst
+    "b": "#C15F3C",
+    "c": "#B1ADA1",  # warm grey
+    "s": "#FFFFFF",  # white, the sparkle
+    "g": "#F4F3EE",  # off white
+    "l": "#B1ADA1",
+}
+
 
 def write_burst_gif(path):
     """The confetti burst as a transparent animated GIF, for the overlay window.
@@ -200,7 +213,7 @@ def write_burst_gif(path):
             dx, dy = x + s / 2 - mid, y + s / 2 - mid
             ox = int(dx * (throw - 1) * scale * 0.9)
             oy = int(dy * (throw - 1) * scale * 0.9 + fall * BURST_PX * 0.35)
-            r, g, b, _ = rgba(PALETTE[k])
+            r, g, b, _ = rgba(BURST_PALETTE[k])
             for yy in range(y * scale, (y + s) * scale):
                 for xx in range(x * scale, (x + s) * scale):
                     X, Y = xx + ox, yy + oy
@@ -288,6 +301,10 @@ def demo():
     assert text.count('values="0.00,0.00; 0,0') == 1
     # one cycle of the overlay animation, which the window's lifetime must cover
     assert abs(BURST_FRAMES * BURST_MS / 1000 - 1.26) < 0.01, BURST_FRAMES * BURST_MS
+    # every grid key must have a burst colour, or a chip would vanish mid-throw
+    assert set(BURST_PALETTE) == set(PALETTE), set(PALETTE) ^ set(BURST_PALETTE)
+    for v in BURST_PALETTE.values():
+        assert len(v) == 7 and v[0] == "#", v
     print("demo ok")
 
 

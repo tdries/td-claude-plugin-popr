@@ -3,6 +3,11 @@
 All notable changes to POPR. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [SemVer](https://semver.org/).
 
+## [1.1.1] - 2026-09-10
+
+### Changed
+- The explosion has its own palette, separate from the logo's: `#C15F3C`, `#FFFFFF`, `#F4F3EE`, `#B1ADA1`. The logo is a mark that has to hold up on ivory and in a settings list; the burst is thrown over whatever happens to be on the desktop, and wants more contrast and fewer mid-tones.
+
 ## [1.1.0] - 2026-09-10
 
 ### Added

@@ -213,8 +213,12 @@ so it cannot make Claude wait.
 Fires on `stop` and on `popr test` only. A permission prompt or an API error gets
 no confetti. `confetti` turns it off, `confetti_size` resizes it.
 
-`burst.gif` is generated from the same `GRID` as the logo, so the animation cannot
-drift from the mark. It needs Pillow, which stays a dev-time dependency like
+`burst.gif` is generated from the same `GRID` as the logo, so the shape cannot
+drift from the mark. Its colours are deliberately a separate `BURST_PALETTE`
+(`#C15F3C`, `#FFFFFF`, `#F4F3EE`, `#B1ADA1`): the logo has to hold up on ivory
+and in a settings list, while the burst is thrown over whatever is on the
+desktop. The white and off-white chips read as sparkle on a dark wallpaper and
+go quiet on a pale one, which is the trade for that contrast. It needs Pillow, which stays a dev-time dependency like
 librsvg because the GIF is committed and users never regenerate it.
 
 ## 5 · Configuration
