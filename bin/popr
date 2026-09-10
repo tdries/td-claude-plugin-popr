@@ -19,7 +19,7 @@
 # See `popr help` for the keys.
 
 set -u
-VERSION="1.3.0"
+VERSION="1.3.1"
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:${PATH:-}"
 
 MODE="${1:-stop}"
@@ -634,10 +634,10 @@ doctor() {
     fi
     if ! is_true "$(opt confetti true)"; then
         printf '  %-20s %s\n' "confetti" "off"
-    elif [ -f "$ROOT/assets/burst.gif" ] && [ -f "$ROOT/assets/overlay.js" ]; then
-        printf '  %-20s %s\n' "confetti" "on, $(opt confetti_size 90)px"
+    elif [ -f "$BANNER_JS" ]; then
+        printf '  %-20s %s\n' "confetti" "on, reaching $(opt confetti_size 90)px, seeded from $PROJECT_NAME"
     else
-        printf '  %-20s %s\n' "confetti" "on, but assets are missing"
+        printf '  %-20s %s\n' "confetti" "on, but $BANNER_JS is missing"
     fi
     if is_true "$(opt banner true)" && [ -f "$BANNER_JS" ]; then
         printf '  %-20s %s\n' "banners" "POPR's own, style $(opt banner_style pill)"

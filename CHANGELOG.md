@@ -3,6 +3,11 @@
 All notable changes to POPR. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [SemVer](https://semver.org/).
 
+## [1.3.1] - 2026-09-10
+
+### Fixed
+- `popr doctor` reported "confetti on, but assets are missing" on a perfectly working install. It was still checking for `burst.gif` and `overlay.js`, which the procedural rewrite deleted. A health check that cries wolf is worse than no health check, so it now checks what the confetti actually needs and names the project the burst is seeded from.
+
 ## [1.3.0] - 2026-09-10
 
 POPR stops using macOS notifications and draws its own banners.

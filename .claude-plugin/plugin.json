@@ -1,7 +1,7 @@
 {
   "name": "popr",
   "displayName": "POPR",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "description": "Hear and see a clickable macOS notification when a Claude Code session finishes, needs your input, or hits an error. Click it to jump back to the right window.",
   "author": {
     "name": "Tim Dries",
