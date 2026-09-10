@@ -75,6 +75,13 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           mkdir -p packaging/npm/payload
-          rsync -a --exclude .git --exclude packaging --exclude dist ./ packaging/npm/payload/
+          # Only what POPR needs at runtime. Shipping the test suite, CI config
+          # and editor settings to every installer is noise.
+          rsync -a --exclude .git --exclude .github --exclude packaging \
+                --exclude dist --exclude tests --exclude docs \
+                --exclude .editorconfig --exclude .gitignore \
+                --exclude .vscode --exclude __pycache__ \
+                --exclude 'assets/make_*' --exclude 'assets/*.svg' \
+                ./ packaging/npm/payload/
           echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" > ~/.npmrc
           (cd packaging/npm && npm publish --access public)
