@@ -191,10 +191,31 @@ Asked and answered, so nobody relitigates it:
 
 | Want | Verdict |
 |---|---|
-| Animated icon in the banner | No. The banner renders one static image. A custom animated view needs a Notification Content Extension, which is an Xcode app target, only styles the *expanded* notification, and reintroduces signing. The logo is animated in the README instead. |
+| Animated icon in the banner | No, and tested rather than assumed: an animated GIF passed as `-contentImage` is accepted, delivered, and rendered as its first frame only. The banner icon is the bundle's static `.icns`. No other macOS notifier avoids this, because they all post through `UNUserNotificationCenter` and the OS draws the banner. **Worked around** in §4.6 by drawing our own window instead. |
 | Control the banner layout | No. Five content slots (icon, name, title, subtitle, body) plus an optional right hand image, an action button and a reply field. Arrangement, type, colour, corner radius, position and the slide-in are the system's. |
 | Force "stays until clicked" | Partly. It is the alert style, a per app user setting. The Info.plist key asks for the right default; the user can always override it. |
 | Several notifications stacked | Yes, already. One `-group` per session id, so N live sessions give N banners. macOS collapses them into one stack while that app's "Group notifications" is set to Automatically; setting it to Off lists them individually. That is a user setting with no Info.plist equivalent. |
+
+### 4.6 The confetti overlay
+
+Since macOS refuses to animate anything inside a notification (§4.5), POPR stops
+asking it to. On a finished turn it draws its own window:
+
+- Borderless, transparent background, `ignoresMouseEvents` so clicks pass through to whatever is beneath, `NSStatusWindowLevel` so it sits above ordinary windows, and a collection behaviour that puts it on every Space without sliding.
+- Activation policy `Accessory`, so no Dock icon appears and focus is never taken.
+- It plays `assets/burst.gif` once, about 1.3 seconds, then closes.
+
+Implemented as JXA (`assets/overlay.js`) driven by `osascript`, deliberately, not
+Swift: `osascript` ships with macOS, so this adds no dependency and needs no
+Xcode toolchain at install time. Launched detached, like every other side effect,
+so it cannot make Claude wait.
+
+Fires on `stop` and on `popr test` only. A permission prompt or an API error gets
+no confetti. `confetti` turns it off, `confetti_size` resizes it.
+
+`burst.gif` is generated from the same `GRID` as the logo, so the animation cannot
+drift from the mark. It needs Pillow, which stays a dev-time dependency like
+librsvg because the GIF is committed and users never regenerate it.
 
 ## 5 · Configuration
 
@@ -228,6 +249,8 @@ degrades rather than failing.
 | `quiet_when_focused` | `false` | skip the alert when the target app is already frontmost |
 | `app` | autodetect | force the target app, e.g. `Cursor` |
 | `icon` | bundled logo | path to a PNG, `app` for the host app icon, `none` to hide |
+| `confetti` | `true` | the animated burst on a finished turn |
+| `confetti_size` | `180` | its size in pixels |
 
 ## 6 · Logo
 

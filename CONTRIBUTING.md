@@ -26,12 +26,13 @@ python3 assets/make_logo.py --demo                             # only if you tou
 If you change the logo, regenerate everything derived from it:
 
 ```bash
-python3 assets/make_logo.py --icns
+python3 assets/make_logo.py --icns --gif
 rsvg-convert -w 1280 -h 640 -b '#F0EEE6' assets/social.svg -o assets/social-preview.png
 ```
 
-`librsvg` is a dev-time dependency for that last line only (`brew install librsvg`).
-It is never needed at runtime.
+`librsvg` (`brew install librsvg`) and Pillow (`pip install pillow`) are dev-time
+dependencies for those two lines only. Both outputs are committed, so users never
+regenerate them and neither is ever needed at runtime.
 
 CI runs exactly these on a macOS runner.
 

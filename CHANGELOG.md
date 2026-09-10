@@ -3,6 +3,15 @@
 All notable changes to POPR. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [SemVer](https://semver.org/).
 
+## [1.1.0] - 2026-09-10
+
+### Added
+- A confetti burst when a turn finishes: an animated pixel burst in the corner of the screen, from the same grid as the logo.
+
+  macOS will not animate anything inside a notification. The banner icon comes from the app bundle as a static `.icns`, and an animated GIF handed over as the content image renders as its first frame and stops, which we tested rather than assumed. Every macOS notifier posts through the same `UNUserNotificationCenter`, so no alternative tool avoids it; the banner is drawn by the OS.
+
+  So POPR stops asking the notification system for motion and draws its own window instead: borderless, transparent, click through, above everything, gone in about a second. A JXA script run by `osascript`, which ships with macOS, so it adds no dependency and needs no Xcode. Only on a finished turn; a permission prompt or an error gets none. `POPR_CONFETTI=false` disables it, `POPR_CONFETTI_SIZE` resizes it.
+
 ## [1.0.0] - 2026-09-10
 
 First public release. POPR is a rename and repackage of Butlr v2.1.0, which was

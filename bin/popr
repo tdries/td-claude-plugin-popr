@@ -19,7 +19,7 @@
 # See `popr help` for the keys.
 
 set -u
-VERSION="1.0.0"
+VERSION="1.1.0"
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:${PATH:-}"
 
 MODE="${1:-stop}"
@@ -237,6 +237,28 @@ play_sound() {
     esac
     [ -f "$f" ] || f="/System/Library/Sounds/Glass.aiff"
     has afplay && (afplay -v "$(opt volume 1)" "$f" >/dev/null 2>&1 &)
+    return 0
+}
+
+# macOS draws notification banners itself and will not animate anything inside
+# one: the icon comes from the app bundle as a static .icns, and an animated GIF
+# passed as the content image is shown as its first frame and nothing more (we
+# tested it). The only way to get motion is to stop asking the notification
+# system for it, so POPR draws its own window: borderless, transparent, click
+# through, on top, gone in about a second.
+confetti() {
+    is_true "$(opt confetti true)" || return 0
+    [ -f "$ROOT/assets/burst.gif" ] && [ -f "$ROOT/assets/overlay.js" ] || return 0
+    has osascript || return 0
+    local size seconds
+    size="$(opt confetti_size 180)"
+    seconds=1.3 # one cycle of burst.gif is 1.26s; the window outlives it, just
+    if [ -n "$DRY" ]; then
+        printf 'CONFETTI\tgif=%s\tsize=%s\tseconds=%s\n' "$ROOT/assets/burst.gif" "$size" "$seconds"
+        return 0
+    fi
+    (osascript -l JavaScript "$ROOT/assets/overlay.js" \
+        "$ROOT/assets/burst.gif" "$seconds" "$size" >/dev/null 2>&1 &)
     return 0
 }
 
@@ -532,6 +554,13 @@ doctor() {
     if grep -qE '/bin/butlr' "$SETTINGS_FILE" 2>/dev/null; then
         echo "  ⚠ leftover butlr hooks found. Run: popr install"
     fi
+    if ! is_true "$(opt confetti true)"; then
+        printf '  %-20s %s\n' "confetti" "off"
+    elif [ -f "$ROOT/assets/burst.gif" ] && [ -f "$ROOT/assets/overlay.js" ]; then
+        printf '  %-20s %s\n' "confetti" "on, $(opt confetti_size 180)px"
+    else
+        printf '  %-20s %s\n' "confetti" "on, but assets are missing"
+    fi
     printf '  %-20s %s\n' "log" "$LOG_FILE"
     has terminal-notifier || echo "  fix: brew install terminal-notifier"
     has jq || echo "  fix: brew install jq"
@@ -563,6 +592,8 @@ Settings (POPR_<KEY> env > plugin option > $CONFIG_FILE > default):
   quiet_when_focused  false     skip when the target app is already in front
   app                 auto      force the target app, e.g. Cursor
   icon                bundled   PNG path, "app" for the host icon, or none
+  confetti            true      the animated burst when a turn finishes
+  confetti_size       180       its size in pixels
 EOF
 }
 
@@ -577,6 +608,7 @@ case "$MODE" in
     test)
         play_sound "$(opt sound_done Glass)"
         notify "POPR test · $LABEL" "Click me" "This should bring $WHERE to the front"
+        confetti
         speak "POPR test for $PROJECT_NAME"
         log "test fired for $LABEL in $WHERE"
         echo "Test notification sent for $LABEL in $WHERE. Clicking it runs: $CLICK_CMD"
@@ -606,6 +638,7 @@ run() {
             [ -n "$msg" ] || msg="Ready for your next prompt"
             play_sound "$(opt sound_done Glass)"
             notify "✅ $LABEL" "Done in $WHERE" "$msg"
+            confetti
             speak "$PROJECT_NAME is done"
             ;;
         attention)

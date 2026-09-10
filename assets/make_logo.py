@@ -7,7 +7,11 @@ regenerated on any Mac with a stock python3.
 
     python3 assets/make_logo.py           logo.svg, logo-animated.svg, all PNGs
     python3 assets/make_logo.py --icns    also POPR.icns (needs macOS iconutil)
+    python3 assets/make_logo.py --gif     also burst.gif (needs Pillow, dev only)
     python3 assets/make_logo.py --demo    self check
+
+Everything except --gif is standard library. burst.gif is a committed asset that
+users never regenerate, so Pillow stays a dev-time dependency, like librsvg.
 """
 
 import pathlib
@@ -168,6 +172,56 @@ def write_animated_svg(path, dur=3.0):
     )
 
 
+BURST_PX, BURST_FRAMES, BURST_MS = 192, 28, 45
+
+
+def write_burst_gif(path):
+    """The confetti burst as a transparent animated GIF, for the overlay window.
+
+    Chips are thrown outward from the core, hang, then fall away and fade. The
+    same GRID as everything else, so the animation cannot drift from the logo.
+    """
+    try:
+        from PIL import Image
+    except ImportError:
+        print("Pillow not installed, skipping burst.gif (pip install pillow)", file=sys.stderr)
+        return False
+
+    mid, scale = CELLS / 2, BURST_PX // CELLS
+    frames = []
+    for f in range(BURST_FRAMES):
+        t = f / (BURST_FRAMES - 1)
+        throw = 1 - (1 - min(t / 0.35, 1)) ** 3          # fast out, easing to a stop
+        fall = max(0.0, (t - 0.6) / 0.4)                 # then gravity takes them
+        alpha = 255 if t < 0.6 else int(255 * (1 - fall))
+        img = Image.new("RGBA", (BURST_PX, BURST_PX), (0, 0, 0, 0))
+        px = img.load()
+        for x, y, s, k in GRID:
+            dx, dy = x + s / 2 - mid, y + s / 2 - mid
+            ox = int(dx * (throw - 1) * scale * 0.9)
+            oy = int(dy * (throw - 1) * scale * 0.9 + fall * BURST_PX * 0.35)
+            r, g, b, _ = rgba(PALETTE[k])
+            for yy in range(y * scale, (y + s) * scale):
+                for xx in range(x * scale, (x + s) * scale):
+                    X, Y = xx + ox, yy + oy
+                    if 0 <= X < BURST_PX and 0 <= Y < BURST_PX:
+                        px[X, Y] = (r, g, b, alpha)
+        frames.append(img)
+
+    def paletted(rgba_frame):
+        # Quantise to 255 colours and reserve index 255 for full transparency,
+        # so the window shows the desktop through the gaps rather than a box.
+        a = rgba_frame.getchannel("A")
+        p = rgba_frame.convert("RGB").quantize(colors=255, method=Image.MEDIANCUT)
+        p.paste(255, a.point(lambda v: 255 if v <= 128 else 0))
+        return p
+
+    out = [paletted(f) for f in frames]
+    out[0].save(path, save_all=True, append_images=out[1:], duration=BURST_MS,
+                loop=0, transparency=255, disposal=2, optimize=False)
+    return True
+
+
 def write_icns(path):
     """Build the macOS icon via iconutil, which ships with the OS."""
     if not shutil.which("iconutil"):
@@ -182,7 +236,7 @@ def write_icns(path):
     return True
 
 
-def main(want_icns):
+def main(want_icns, want_gif):
     write_svg(HERE / "logo.svg")
     write_animated_svg(HERE / "logo-animated.svg")
     print("assets/logo.svg\nassets/logo-animated.svg")
@@ -194,6 +248,8 @@ def main(want_icns):
     print("assets/icon-512.png  (app icon, on its ivory body)")
     if want_icns and write_icns(HERE / "POPR.icns"):
         print(f"assets/POPR.icns  {(HERE / 'POPR.icns').stat().st_size} bytes")
+    if want_gif and write_burst_gif(HERE / "burst.gif"):
+        print(f"assets/burst.gif  {(HERE / 'burst.gif').stat().st_size} bytes")
 
 
 def demo():
@@ -230,6 +286,8 @@ def demo():
     assert text.count('attributeName="opacity"') == len(GRID)
     # the 2x2 core sits dead centre, so it is the one chip with no travel
     assert text.count('values="0.00,0.00; 0,0') == 1
+    # one cycle of the overlay animation, which the window's lifetime must cover
+    assert abs(BURST_FRAMES * BURST_MS / 1000 - 1.26) < 0.01, BURST_FRAMES * BURST_MS
     print("demo ok")
 
 
@@ -237,4 +295,4 @@ if __name__ == "__main__":
     if "--demo" in sys.argv:
         demo()
     else:
-        main("--icns" in sys.argv)
+        main("--icns" in sys.argv, "--gif" in sys.argv)

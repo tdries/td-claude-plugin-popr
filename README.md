@@ -42,6 +42,7 @@ clicking through to its own window.
 | 🖱 **One click back** | Reopens the exact editor window that session belongs to |
 | 🧹 **Self cleaning** | A session's banner vanishes the moment you prompt it again |
 | 🎊 **Its own identity** | POPR's name and confetti icon on the banner, and its own row in System Settings |
+| 🎉 **A confetti burst** | An animated pixel burst in the corner when a turn lands, drawn by POPR itself |
 | 🔒 **Nothing leaves** | No network calls, no telemetry. Ever. |
 
 ## Install
@@ -133,6 +134,8 @@ popr config     # interactive, writes ~/.config/popr/config.json
 | Quiet when the editor is in front | `POPR_QUIET_WHEN_FOCUSED` | `false` | |
 | Force the target app | `POPR_APP` | autodetect | e.g. `Cursor` |
 | Banner picture | `POPR_ICON` | POPR confetti | a PNG path, `app` for the editor icon, `none` |
+| Confetti burst | `POPR_CONFETTI` | `true` | the animated burst when a turn finishes |
+| Confetti size | `POPR_CONFETTI_SIZE` | `180` | pixels |
 
 Sounds: Basso, Blow, Bottle, Frog, Funk, Glass, Hero, Morse, Ping, Pop, Purr,
 Sosumi, Submarine, Tink.
@@ -170,6 +173,19 @@ that folder open. For anything else it activates the app.
 **Never in your way.** All the slow work happens in a detached subshell and every
 code path exits 0, so a hook cannot slow down or break your turn.
 
+**The confetti.** macOS will not animate anything inside a notification: the
+banner icon comes from the app bundle as a static `.icns`, and an animated GIF
+handed over as the content image is shown as its first frame and nothing more.
+Every notification tool on macOS posts through the same `UNUserNotificationCenter`,
+so switching tools changes nothing — the banner is drawn by the OS.
+
+So POPR does not ask the notification system for motion. On a finished turn it
+draws its own window: borderless, transparent, click through, above everything,
+gone in about a second. That window is entirely ours, so the animation is too.
+It is a JXA script driven by `osascript`, which ships with macOS, so it needs no
+Xcode and no extra dependency. A permission prompt or an API error gets no
+confetti, because neither is worth celebrating. `POPR_CONFETTI=false` turns it off.
+
 **Why it installs an app.** macOS takes a notification's icon and name from the
 bundle that posts it, and offers no API to override either — `terminal-notifier`
 removed its `-appIcon` and `-sender` flags for exactly this reason. So
@@ -189,7 +205,7 @@ macOS 13 or later, [Claude Code](https://claude.com/claude-code), plus `jq` and
 
 Honest ones, so nobody files them twice:
 
-- **The banner cannot be animated, and its layout is not yours.** macOS draws it. You fill five slots: icon, name, title, subtitle, body, plus one optional static image. A custom drawn banner needs a Notification Content Extension, which is an Xcode app target and only affects the *expanded* notification anyway.
+- **The banner cannot be animated, and its layout is not yours.** macOS draws it. You fill five slots: icon, name, title, subtitle, body, plus one optional static image, and an animated GIF in that slot renders as a still first frame. This is the OS, not the tool: every macOS notifier posts through the same framework. POPR's confetti sidesteps it by drawing a separate window, which is why the burst is animated and the banner icon is not.
 - **"Stays until clicked" comes set up.** POPR's bundle declares the persistent Alerts style, so macOS defaults to it. You can still override it in System Settings, which always wins.
 - **Stacking is partly macOS's call.** One banner per session is guaranteed. Whether several are listed separately or collapsed into one stack is POPR's "Group notifications" setting: set it to **Off** for a list. There is no way to declare that from the app.
 - **The click focuses a window, not a tab.** With several sessions in one folder, the title tells you the project and the preview tells you the conversation.
@@ -203,7 +219,7 @@ Log: `~/Library/Logs/popr.log`
 ```bash
 tests/test.sh                                                   # 25 assertions, posts nothing
 shellcheck bin/popr install.sh tests/test.sh "packaging/Install POPR.command"
-python3 assets/make_logo.py --icns                              # regenerate every logo form
+python3 assets/make_logo.py --icns --gif                        # regenerate every logo form
 ```
 
 Tests run under `POPR_DRY_RUN=1`, which prints what would be posted instead of

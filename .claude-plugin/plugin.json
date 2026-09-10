@@ -1,12 +1,22 @@
 {
   "name": "popr",
   "displayName": "POPR",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Hear and see a clickable macOS notification when a Claude Code session finishes, needs your input, or hits an error. Click it to jump back to the right window.",
-  "author": { "name": "Tim Dries", "url": "https://github.com/tdries" },
+  "author": {
+    "name": "Tim Dries",
+    "url": "https://github.com/tdries"
+  },
   "homepage": "https://github.com/tdries/td-claude-plugin-popr",
   "license": "MIT",
-  "keywords": ["notifications", "macos", "vscode", "hooks", "sessions", "productivity"],
+  "keywords": [
+    "notifications",
+    "macos",
+    "vscode",
+    "hooks",
+    "sessions",
+    "productivity"
+  ],
   "userConfig": {
     "sound_done": {
       "type": "string",
@@ -55,6 +65,18 @@
       "title": "Banner picture",
       "description": "Full path to a PNG. Leave empty for the POPR confetti, app for the editor icon, none to hide it.",
       "default": ""
+    },
+    "confetti": {
+      "type": "boolean",
+      "title": "Confetti burst",
+      "description": "Play an animated pixel confetti burst in the corner when a turn finishes. POPR draws this itself; macOS will not animate anything inside a notification banner.",
+      "default": true
+    },
+    "confetti_size": {
+      "type": "string",
+      "title": "Confetti size",
+      "description": "Size of the burst in pixels.",
+      "default": "180"
     }
   }
 }

@@ -127,7 +127,21 @@ chmod +x "$FAKE/terminal-notifier"
 out="$(POPR_BUNDLE="$TMP/POPR.app" run stop '{"session_id":"s7"}')"
 contains "branded once the bundle exists" "$out" "branded=1"
 
-# 11 · version matches the packaged manifests
+# 11 · the confetti overlay fires when a turn finishes, and only then. A
+#      permission prompt or an API error is not something to throw a party over.
+out="$(run stop '{"session_id":"s8"}')"
+contains "confetti · fires on a finished turn" "$out" "CONFETTI"
+contains "confetti · default size" "$out" "size=180"
+out="$(run attention '{"session_id":"s8","message":"hi"}')"
+absent "confetti · silent when Claude needs you" "$out" "CONFETTI"
+out="$(run error '{"session_id":"s8","error_type":"overloaded_error"}')"
+absent "confetti · silent on an error" "$out" "CONFETTI"
+out="$(POPR_CONFETTI=false run stop '{"session_id":"s8"}')"
+absent "confetti · can be switched off" "$out" "CONFETTI"
+out="$(POPR_CONFETTI_SIZE=260 run stop '{"session_id":"s8"}')"
+contains "confetti · size is configurable" "$out" "size=260"
+
+# 12 · version matches the packaged manifests
 v="$("$POPR" version)"
 for m in "$ROOT/.claude-plugin/plugin.json" "$ROOT/packaging/npm/package.json"; do
     [ -f "$m" ] || continue
