@@ -1,0 +1,43 @@
+name: Bug report
+description: A notification did not appear, went to the wrong place, or misbehaved
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Most "no banner appeared" reports are one of three things, and `popr doctor`
+        names all three. Please run it first.
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of `popr doctor`
+      description: Paste it whole. It reports your macOS version, the dependencies, the app POPR detected, the click action it would run, and any double registration or stale bundle warning.
+      render: text
+    validations:
+      required: true
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Checked already
+      options:
+        - label: System Settings › Notifications › POPR is set to allow, with style **Alerts**
+        - label: No Focus mode was active
+        - label: I reloaded the editor window after installing
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected, and what happened instead
+    validations:
+      required: true
+  - type: input
+    id: install
+    attributes:
+      label: How you installed POPR
+      placeholder: plugin marketplace / brew / curl / npx / double click
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Relevant lines from `~/Library/Logs/popr.log`
+      render: text

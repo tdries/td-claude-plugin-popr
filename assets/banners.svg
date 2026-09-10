@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 300" width="700" height="300" role="img" aria-label="Three POPR notification banners stacked: a green tick for a finished session, an hourglass for one waiting on a permission, and a warning for one that hit an API error. Each shows the POPR confetti icon, the project name and git branch, which editor it happened in, and a line of detail.">
+<style>
+  .n { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
+  .app { font-size: 12.5px; font-weight: 700; fill: #FFFFFF; }
+  .ttl { font-size: 13px; font-weight: 600; fill: #FFFFFF; }
+  .sub { font-size: 12px; fill: #A9A9AD; }
+  .bdy { font-size: 12px; fill: #C9C9CE; }
+</style>
+<defs>
+  <g id="chip">
+    <rect x="0"  y="6"  width="7" height="7" fill="#D97757"/>
+    <rect x="12" y="0"  width="6" height="6" fill="#6A9BCC"/>
+    <rect x="22" y="9"  width="7" height="7" fill="#CC785C"/>
+    <rect x="3"  y="20" width="6" height="6" fill="#BCD1CA"/>
+    <rect x="14" y="14" width="8" height="8" fill="#D97757"/>
+    <rect x="24" y="22" width="6" height="6" fill="#BF9C88"/>
+    <rect x="7"  y="12" width="5" height="5" fill="#CBCADB"/>
+    <rect x="17" y="26" width="6" height="6" fill="#6A9BCC"/>
+  </g>
+  <g id="banner">
+    <rect x="0" y="0" width="700" height="88" rx="18" fill="#26262A"/>
+    <rect x="18" y="20" width="48" height="48" rx="11" fill="#3A3A40"/>
+  </g>
+</defs>
+
+<use href="#banner" y="0"/>
+<g transform="translate(28,30)"><use href="#chip"/></g>
+<text class="n app" x="82" y="34">POPR</text>
+<text class="n ttl" x="82" y="53">✅ acme-widgets · feature/tidy</text>
+<text class="n sub" x="82" y="70">Done in VS Code — Deployed to staging, all 14 tests green.</text>
+
+<use href="#banner" y="106"/>
+<g transform="translate(28,136)"><use href="#chip"/></g>
+<text class="n app" x="82" y="140">POPR</text>
+<text class="n ttl" x="82" y="159">⏳ kikl-cockpit · feature/sdm</text>
+<text class="n sub" x="82" y="176">Needs you in Cursor — Claude wants permission to run git push</text>
+
+<use href="#banner" y="212"/>
+<g transform="translate(28,242)"><use href="#chip"/></g>
+<text class="n app" x="82" y="246">POPR</text>
+<text class="n ttl" x="82" y="265">⚠️ popr · main</text>
+<text class="n sub" x="82" y="282">Stopped in VS Code — Claude hit an error: rate_limit_error</text>
+</svg>

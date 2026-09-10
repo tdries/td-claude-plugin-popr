@@ -1,0 +1,31 @@
+name: Feature request
+description: Suggest something POPR should do
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        POPR is deliberately small. Before writing this up, please check
+        [docs/DESIGN.md](https://github.com/tdries/td-claude-plugin-popr/blob/main/docs/DESIGN.md)
+        section 4.5 and section 9. Several popular requests are recorded there as
+        impossible on macOS (an animated banner icon, custom banner layout) or as
+        deliberately out of scope (a menu bar app, Windows support, auto update),
+        with the reasoning.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you actually trying to do?
+      description: Describe the situation, not the solution. It is often solvable with an existing setting.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like POPR to do
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you tried instead
+      description: Which settings you have already ruled out, and why they were not enough.

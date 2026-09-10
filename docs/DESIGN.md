@@ -16,7 +16,7 @@ that installs cleanly without an Apple Developer ID.
 | Constraint | Consequence |
 |---|---|
 | No Apple Developer Program membership | No `.app`, no `.pkg`, no `.dmg`, no `--cask`. Anything signed is out. An unsigned bundle on macOS 15+ throws a Gatekeeper wall that is a worse first run than a `brew` command. |
-| Notifications are posted by `terminal-notifier` | Banners carry the `terminal-notifier` identity and permission row, not POPR's. Fixing that needs a signed app, so it stays a documented limitation. |
+| macOS takes a notification's icon and name from the posting bundle, with no API to override either | POPR posts through its **own** restamped copy of terminal-notifier's bundle, built locally at install time. See §4.4. |
 | A hook must never break a turn | Every path in `bin/popr` exits 0. All slow work runs in a detached subshell. |
 | macOS only | `uname` guard in the installer and the formula. |
 
@@ -46,8 +46,10 @@ and field proven shape (`"source": "./"`).
 ├── hooks/hooks.json              plugin hook wiring, uses ${CLAUDE_PLUGIN_ROOT}
 ├── skills/test/SKILL.md          /popr:test
 ├── assets/
-│   ├── make_logo.py              pixel grid -> svg + png, stdlib only
+│   ├── make_logo.py              pixel grid -> svg + animated svg + png + icns
 │   ├── logo.svg                  generated
+│   ├── logo-animated.svg         generated, SMIL burst, README hero
+│   ├── POPR.icns                 generated, the bundle's icon
 │   └── popr-{16,32,64,128,256,512}.png   generated, 256 is the banner icon
 ├── docs/
 │   └── DESIGN.md                 this file
@@ -139,6 +141,52 @@ prints the line to add. It refuses to run on anything but Darwin, and installs
 `jq` and `terminal-notifier` through Homebrew when they are missing, or names
 the missing dependency and exits if Homebrew is absent.
 
+### 4.4 The branded bundle
+
+Butlr shelled out to `terminal-notifier`, so every banner wore terminal-notifier's
+icon and name, and each user had to grant notification permission to a tool that
+was not the one they installed. This is not a cosmetic problem and it cannot be
+argued away: terminal-notifier **removed** both `-appIcon` and `-sender` because
+"macOS has no API to override a notification's icon; the icon always comes from
+the app bundle".
+
+So POPR brings its own bundle. `popr install` copies terminal-notifier's
+`.app`, restamps `CFBundleIdentifier` to `be.tdries.popr`, sets the name and
+`CFBundleIconFile` to POPR, drops in `assets/POPR.icns`, ad-hoc signs it
+(`codesign --sign -`) and registers it with LaunchServices at
+`~/Applications/POPR.app`. Notifications then post through
+`$BUNDLE/Contents/MacOS/terminal-notifier`.
+
+The reason this does not need an Apple Developer ID: Gatekeeper acts on the
+**quarantine** attribute, which is applied to downloaded files. A bundle built on
+the user's own machine has no quarantine attribute, so there is no warning to get
+past. The source bundle is already ad-hoc signed, so re-signing ad-hoc after the
+edits is consistent rather than a downgrade.
+
+Consequences:
+
+- The banner shows POPR and the confetti icon.
+- macOS gives POPR its own row in System Settings › Notifications.
+- `NSUserNotificationAlertStyle = alert` in the Info.plist asks macOS to default
+  the app to persistent Alerts rather than transient Banners, which is what
+  "stays until you click it" means. It is a request, not a guarantee; the user
+  setting is authoritative and the README says how to change it.
+- A terminal-notifier upgrade leaves the copy behind, so the bundle records
+  `POPRBuiltFrom` and `popr doctor` flags a stale one.
+- If the bundle cannot be built, POPR falls back to plain terminal-notifier and
+  says so. Nothing breaks.
+
+### 4.5 What macOS still will not allow
+
+Asked and answered, so nobody relitigates it:
+
+| Want | Verdict |
+|---|---|
+| Animated icon in the banner | No. The banner renders one static image. A custom animated view needs a Notification Content Extension, which is an Xcode app target, only styles the *expanded* notification, and reintroduces signing. The logo is animated in the README instead. |
+| Control the banner layout | No. Five content slots (icon, name, title, subtitle, body) plus an optional right hand image, an action button and a reply field. Arrangement, type, colour, corner radius, position and the slide-in are the system's. |
+| Force "stays until clicked" | Partly. It is the alert style, a per app user setting. The Info.plist key asks for the right default; the user can always override it. |
+| Several notifications stacked | Yes, already. One `-group` per session id, so N live sessions give N banners. macOS may still collapse them into one stack depending on that app's "Group notifications" setting. |
+
 ## 5 · Configuration
 
 Three surfaces. Two of them are free, in that they are native features rather
@@ -228,7 +276,8 @@ succeeds before the tap repo or the npm account exist.
 Deliberately not built, and not to be added without a new design:
 
 - A menu bar app or any GUI beyond the two config surfaces above.
-- `.pkg`, `.dmg`, `--cask`, code signing, notarization.
+- `.pkg`, `.dmg`, `--cask`, Developer ID signing, notarization.
+- A Notification Content Extension, and with it any animated or custom drawn banner.
 - Windows or Linux support.
 - Telemetry, analytics, crash reporting.
 - Auto update.

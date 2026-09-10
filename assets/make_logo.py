@@ -1,20 +1,33 @@
 #!/usr/bin/env python3
 """Generate the POPR logo: pixel confetti burst, Anthropic palette.
 
-One source of truth (GRID below) emitting logo.svg and PNGs at every size we
-ship. Standard library only, no Pillow and no Aseprite, so `assets/` can be
+One source of truth (GRID below) emitting every form the project needs.
+Standard library only, no Pillow and no Aseprite, so `assets/` can be
 regenerated on any Mac with a stock python3.
 
-    python3 assets/make_logo.py
+    python3 assets/make_logo.py           logo.svg, logo-animated.svg, all PNGs
+    python3 assets/make_logo.py --icns    also POPR.icns (needs macOS iconutil)
+    python3 assets/make_logo.py --demo    self check
 """
 
 import pathlib
+import shutil
 import struct
+import subprocess
+import sys
+import tempfile
 import zlib
 
 HERE = pathlib.Path(__file__).parent
 CELLS = 16  # the art is a 16x16 pixel grid
-SIZES = (16, 32, 64, 128, 256, 512)  # every size is a multiple of 16, so pixels stay crisp
+SIZES = (16, 32, 64, 128, 256, 512, 1024)  # all multiples of 16, so pixels stay crisp
+
+# The ten representations macOS wants in an .icns, as (source png, iconset name).
+ICONSET = [
+    (16, "16x16"), (32, "16x16@2x"), (32, "32x32"), (64, "32x32@2x"),
+    (128, "128x128"), (256, "128x128@2x"), (256, "256x256"),
+    (512, "256x256@2x"), (512, "512x512"), (1024, "512x512@2x"),
+]
 
 PALETTE = {
     "o": "#D97757",  # Anthropic primary orange
@@ -37,9 +50,9 @@ GRID = [
     (0, 7, 1, "c"), (2, 2, 2, "o"),
     (5, 1, 1, "l"), (13, 10, 1, "s"), (1, 10, 1, "l"),       # off-beat chips
     (10, 13, 1, "s"), (14, 4, 1, "c"), (0, 4, 1, "g"),
-    (9, 5, 1, "c"), (5, 9, 1, "g"), (5, 5, 1, "s"),           # mid band, fills the
-    (10, 8, 1, "b"), (12, 6, 1, "l"), (2, 6, 1, "o"),         # gap between core
-    (5, 12, 1, "b"), (9, 10, 1, "g"), (3, 3, 1, "l"),         # and outer ring
+    (9, 5, 1, "c"), (5, 9, 1, "g"), (5, 5, 1, "s"),          # mid band, fills the
+    (10, 8, 1, "b"), (12, 6, 1, "l"), (2, 6, 1, "o"),        # gap between core
+    (5, 12, 1, "b"), (9, 10, 1, "g"), (3, 3, 1, "l"),        # and outer ring
 ]
 
 
@@ -100,13 +113,65 @@ def write_svg(path):
     )
 
 
-def main():
+def write_animated_svg(path, dur=3.0):
+    """The burst as an animation: every chip starts collapsed at the core, is
+    thrown outward, hangs, then drifts down and fades. Inner chips leave first.
+
+    SMIL rather than CSS because this is consumed as <img src="...svg">, in the
+    README and as the repo social preview, where stylesheets do not apply.
+    """
+    mid = CELLS / 2
+    far = max(abs(x + s / 2 - mid) + abs(y + s / 2 - mid) for x, y, s, _ in GRID)
+    parts = []
+    for x, y, s, k in GRID:
+        dx, dy = mid - (x + s / 2), mid - (y + s / 2)
+        distance = (abs(dx) + abs(dy)) / far  # 0 at the core, 1 at the rim
+        begin = round(distance * 0.45, 3)     # stagger: the core pops first
+        drift = CELLS / 4
+        parts.append(
+            f'  <rect x="{x}" y="{y}" width="{s}" height="{s}" fill="{PALETTE[k]}" opacity="0">\n'
+            f'    <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.12;0.62;1"\n'
+            f'             dur="{dur}s" begin="{begin}s" repeatCount="indefinite"/>\n'
+            f'    <animateTransform attributeName="transform" type="translate" additive="sum"\n'
+            f'             values="{dx:.2f},{dy:.2f}; 0,0; 0,0; 0,{drift:.2f}"\n'
+            f'             keyTimes="0;0.18;0.62;1" calcMode="spline"\n'
+            f'             keySplines="0.2 0.9 0.3 1; 0 0 1 1; 0.5 0 0.9 0.6"\n'
+            f'             dur="{dur}s" begin="{begin}s" repeatCount="indefinite"/>\n'
+            f"  </rect>"
+        )
+    body = "\n".join(parts)
+    path.write_text(
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {CELLS} {CELLS}" '
+        f'width="512" height="512" shape-rendering="crispEdges" role="img" '
+        f'aria-label="POPR pixel confetti bursting outward and drifting down">\n'
+        f"{body}\n</svg>\n"
+    )
+
+
+def write_icns(path):
+    """Build the macOS icon via iconutil, which ships with the OS."""
+    if not shutil.which("iconutil"):
+        print("iconutil not found, skipping .icns (macOS only)", file=sys.stderr)
+        return False
+    with tempfile.TemporaryDirectory() as tmp:
+        iconset = pathlib.Path(tmp) / "popr.iconset"
+        iconset.mkdir()
+        for src, name in ICONSET:
+            shutil.copy(HERE / f"popr-{src}.png", iconset / f"icon_{name}.png")
+        subprocess.run(["iconutil", "-c", "icns", str(iconset), "-o", str(path)], check=True)
+    return True
+
+
+def main(want_icns):
     write_svg(HERE / "logo.svg")
-    print("assets/logo.svg")
+    write_animated_svg(HERE / "logo-animated.svg")
+    print("assets/logo.svg\nassets/logo-animated.svg")
     for size in SIZES:
         out = HERE / f"popr-{size}.png"
         write_png(out, render(size))
         print(f"assets/{out.name}  {out.stat().st_size} bytes")
+    if want_icns and write_icns(HERE / "POPR.icns"):
+        print(f"assets/POPR.icns  {(HERE / 'POPR.icns').stat().st_size} bytes")
 
 
 def demo():
@@ -124,10 +189,24 @@ def demo():
     # every size we ship must divide the grid cleanly
     for s in SIZES:
         assert s % CELLS == 0, s
+    # every iconset slot must have a PNG behind it
+    for src, _ in ICONSET:
+        assert src in SIZES, src
+    # the animation emits one chip and one pair of animations per grid entry
+    with tempfile.TemporaryDirectory() as tmp:
+        out = pathlib.Path(tmp) / "a.svg"
+        write_animated_svg(out)
+        text = out.read_text()
+    assert text.count("<rect") == len(GRID), text.count("<rect")
+    assert text.count("animateTransform") == len(GRID)
+    assert text.count('attributeName="opacity"') == len(GRID)
+    # the 2x2 core sits dead centre, so it is the one chip with no travel
+    assert text.count('values="0.00,0.00; 0,0') == 1
     print("demo ok")
 
 
 if __name__ == "__main__":
-    import sys
-
-    demo() if "--demo" in sys.argv else main()
+    if "--demo" in sys.argv:
+        demo()
+    else:
+        main("--icns" in sys.argv)

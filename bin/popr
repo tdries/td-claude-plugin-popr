@@ -197,6 +197,28 @@ pick_icon() {
 }
 ICON="$(pick_icon)"
 
+# ---------------------------------------------------------------- notifier
+# macOS takes a notification's icon and name from the bundle that posts it, and
+# offers no API to override either (terminal-notifier dropped -appIcon and
+# -sender for exactly this reason). So POPR posts through its own copy of
+# terminal-notifier's bundle, restamped with POPR's identity and icon. It is
+# built on the user's own machine at install time, so it carries no quarantine
+# flag and needs no Developer ID. Falls back to plain terminal-notifier.
+BUNDLE="${POPR_BUNDLE:-$HOME/Applications/POPR.app}"
+BUNDLE_ID="be.tdries.popr"
+LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+
+NOTIFIER=""
+if [ -x "$BUNDLE/Contents/MacOS/terminal-notifier" ]; then
+    NOTIFIER="$BUNDLE/Contents/MacOS/terminal-notifier"
+    BRANDED=1
+elif has terminal-notifier; then
+    NOTIFIER="$(command -v terminal-notifier)"
+    BRANDED=0
+else
+    BRANDED=0
+fi
+
 # ---------------------------------------------------------------- output
 is_focused() {
     has lsappinfo || return 1
@@ -228,14 +250,14 @@ speak() {
 notify() {
     local title="$1" subtitle="$2" message="$3"
     if [ -n "$DRY" ]; then
-        printf 'NOTIFY\ttitle=%s\tsubtitle=%s\tmessage=%s\tgroup=%s\ticon=%s\tclick=%s\n' \
-            "$title" "$subtitle" "$message" "$GROUP" "${ICON:-}" "$CLICK_CMD"
+        printf 'NOTIFY\ttitle=%s\tsubtitle=%s\tmessage=%s\tgroup=%s\ticon=%s\tbranded=%s\tclick=%s\n' \
+            "$title" "$subtitle" "$message" "$GROUP" "${ICON:-}" "$BRANDED" "$CLICK_CMD"
         return 0
     fi
-    if has terminal-notifier; then
+    if [ -n "$NOTIFIER" ]; then
         local args=(-title "$title" -subtitle "$subtitle" -message "$message" -group "$GROUP" -execute "$CLICK_CMD")
         [ -n "$ICON" ] && args+=(-contentImage "$ICON")
-        terminal-notifier "${args[@]}" >/dev/null 2>&1
+        "$NOTIFIER" "${args[@]}" >/dev/null 2>&1
     else
         osascript - "$title" "$subtitle" "$message" >/dev/null 2>&1 <<'OSA'
 on run argv
@@ -271,6 +293,69 @@ plugin_install_found() {
         [ -d "$d" ] && [ "$d" != "$ROOT" ] && { printf '%s' "$d"; return 0; }
     done
     return 1
+}
+
+# Where Homebrew (or anything else) keeps terminal-notifier's app bundle.
+source_bundle() {
+    local tn dir
+    has terminal-notifier || return 1
+    tn="$(command -v terminal-notifier)"
+    while [ -L "$tn" ]; do
+        dir="$(cd -P "$(dirname "$tn")" && pwd)"
+        tn="$(readlink "$tn")"
+        case "$tn" in /*) ;; *) tn="$dir/$tn" ;; esac
+    done
+    dir="$(cd -P "$(dirname "$tn")/.." && pwd)/terminal-notifier.app"
+    [ -d "$dir" ] || return 1
+    printf '%s' "$dir"
+}
+
+pset() { # plist key value  · -replace refuses a key that is not there yet
+    plutil -remove "$2" "$1" >/dev/null 2>&1
+    plutil -insert "$2" -string "$3" "$1" >/dev/null 2>&1
+}
+
+build_bundle() {
+    local src plist
+    if ! src="$(source_bundle)"; then
+        echo "popr: cannot find terminal-notifier.app, so banners will not be branded" >&2
+        return 1
+    fi
+    [ -f "$ROOT/assets/POPR.icns" ] || { echo "popr: assets/POPR.icns is missing" >&2; return 1; }
+
+    rm -rf "$BUNDLE"
+    mkdir -p "$(dirname "$BUNDLE")"
+    cp -R "$src" "$BUNDLE"
+    rm -rf "$BUNDLE/Contents/_CodeSignature"
+    find "$BUNDLE/Contents/Resources" -maxdepth 1 -name '*.icns' -delete
+    cp "$ROOT/assets/POPR.icns" "$BUNDLE/Contents/Resources/POPR.icns"
+
+    plist="$BUNDLE/Contents/Info.plist"
+    pset "$plist" CFBundleIdentifier "$BUNDLE_ID"
+    pset "$plist" CFBundleName POPR
+    pset "$plist" CFBundleDisplayName POPR
+    pset "$plist" CFBundleIconFile POPR
+    # asks macOS to default this app to persistent Alerts rather than Banners
+    pset "$plist" NSUserNotificationAlertStyle alert
+    # so doctor can tell when a terminal-notifier upgrade left the copy behind
+    pset "$plist" POPRBuiltFrom "$("$src/Contents/MacOS/terminal-notifier" -version 2>/dev/null | head -n 1)"
+
+    # The source bundle is itself ad-hoc signed, so re-signing ad-hoc after our
+    # edits keeps it valid without any certificate.
+    codesign --force --sign - "$BUNDLE" >/dev/null 2>&1 || {
+        echo "popr: could not sign $BUNDLE" >&2
+        return 1
+    }
+    [ -x "$LSREGISTER" ] && "$LSREGISTER" -f "$BUNDLE" >/dev/null 2>&1
+    return 0
+}
+
+bundle_stale() { # true when terminal-notifier moved on since we copied it
+    local built current
+    [ -d "$BUNDLE" ] || return 1
+    built="$(plutil -extract POPRBuiltFrom raw "$BUNDLE/Contents/Info.plist" 2>/dev/null)"
+    current="$(terminal-notifier -version 2>/dev/null | head -n 1)"
+    [ -n "$current" ] && [ "$built" != "$current" ]
 }
 
 hooks_edit() { # $1 = add | remove
@@ -332,6 +417,12 @@ EOF
         fi
     done
 
+    if build_bundle; then
+        echo "→ built $BUNDLE, so banners carry POPR's name and icon"
+    else
+        echo "→ falling back to plain terminal-notifier for banners"
+    fi
+
     hooks_edit add || exit 1
     echo "→ hooks registered in $SETTINGS_FILE (backup at $SETTINGS_FILE.popr-backup)"
 
@@ -346,8 +437,8 @@ EOF
 ✅ POPR installed
 
 Next:
-  1. System Settings › Notifications › terminal-notifier
-     Allow notifications: on · Banner style: Persistent
+  1. System Settings › Notifications › POPR
+     Allow notifications: on · Alert style: Alerts (so banners wait for a click)
   2. Reload your editor window so the new hooks are picked up.
   3. popr config    to change sounds and behaviour
      popr doctor    to check everything
@@ -359,6 +450,10 @@ EOF
 uninstall_cmd() {
     hooks_edit remove || exit 1
     echo "→ POPR hooks removed from $SETTINGS_FILE"
+    if [ -d "$BUNDLE" ]; then
+        rm -rf "$BUNDLE"
+        echo "→ removed $BUNDLE"
+    fi
     echo "  The popr command itself is still installed; remove it with your package manager."
 }
 
@@ -411,6 +506,14 @@ doctor() {
     printf '  %-20s %s\n' "project" "$LABEL"
     printf '  %-20s %s\n' "click action" "$CLICK_CMD"
     printf '  %-20s %s\n' "banner picture" "${ICON:-none}"
+    if [ "$BRANDED" = 1 ]; then
+        printf '  %-20s %s\n' "posts as" "POPR · $BUNDLE"
+        bundle_stale && echo "  ⚠ terminal-notifier was upgraded since this bundle was built. Run: popr install"
+    elif [ -n "$NOTIFIER" ]; then
+        printf '  %-20s %s\n' "posts as" "terminal-notifier (unbranded). Run: popr install"
+    else
+        printf '  %-20s %s\n' "posts as" "osascript fallback, no click action"
+    fi
     if [ -f "$CONFIG_FILE" ]; then
         printf '  %-20s %s\n' "config" "$CONFIG_FILE"
     else
@@ -432,7 +535,11 @@ doctor() {
     printf '  %-20s %s\n' "log" "$LOG_FILE"
     has terminal-notifier || echo "  fix: brew install terminal-notifier"
     has jq || echo "  fix: brew install jq"
-    echo "  No banner? System Settings › Notifications › terminal-notifier: allow, style Persistent."
+    if [ "$BRANDED" = 1 ]; then
+        echo "  No banner? System Settings › Notifications › POPR: allow, style Alerts."
+    else
+        echo "  No banner? System Settings › Notifications › terminal-notifier: allow, style Alerts."
+    fi
     echo "  Focus modes silence it too."
 }
 
@@ -477,7 +584,7 @@ case "$MODE" in
         exit 0
         ;;
     clear)
-        has terminal-notifier && (terminal-notifier -remove "$GROUP" >/dev/null 2>&1 &)
+        [ -n "$NOTIFIER" ] && ("$NOTIFIER" -remove "$GROUP" >/dev/null 2>&1 &)
         exit 0
         ;;
     stop | attention | error) ;;

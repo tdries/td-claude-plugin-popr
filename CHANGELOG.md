@@ -16,7 +16,9 @@ never distributed outside its author's laptop.
 - `POPR_DRY_RUN=1`, which prints what would be posted instead of posting it. The test suite is built on it.
 - `tests/test.sh`, 21 assertions covering the three notification payloads, truncation, settings precedence, worktree resolution, argument injection, and the never-break-a-turn contract.
 - Four install channels: Claude Code plugin, Homebrew, curl, npm.
-- Pixel confetti logo in the Anthropic palette, generated from a single grid by `assets/make_logo.py` using only the Python standard library.
+- Pixel confetti logo in the Anthropic palette, generated from a single grid by `assets/make_logo.py` using only the Python standard library: static SVG, animated SVG, seven PNG sizes and the macOS `.icns`.
+- POPR posts through its own app bundle, so banners carry POPR's name and confetti icon and macOS gives POPR its own row in System Settings. `popr install` builds it from terminal-notifier's bundle and ad-hoc signs it locally, which is why it needs no Apple Developer ID. `popr doctor` flags a bundle left stale by a terminal-notifier upgrade, and POPR falls back to plain terminal-notifier if it cannot build one.
+- The bundle asks macOS to default to persistent Alerts rather than transient Banners, so a notification waits for your click.
 
 ### Fixed
 - Symlink safe root resolution. Butlr derived its package root from `dirname $0/..`, which under Homebrew or any symlinked install resolved to the wrong directory and lost the bundled banner icon.

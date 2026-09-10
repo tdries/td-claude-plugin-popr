@@ -115,7 +115,19 @@ printf 'gitdir: %s/.git/worktrees/scratch\n' "$PROJ" >"$WT/.git"
 out="$(printf '%s' '{"session_id":"s6"}' | CLAUDE_PROJECT_DIR="$WT" "$POPR" stop 2>&1)"
 contains "worktree · resolves to the main repo and its branch" "$out" "title=✅ acme-widgets · hotfix"
 
-# 10 · version matches the packaged manifests
+# 10 · banners post through POPR's own bundle when it has been built, which is
+#      what puts POPR's name and icon on the left instead of terminal-notifier's
+out="$(POPR_BUNDLE="$TMP/absent.app" run stop '{"session_id":"s7"}')"
+contains "unbranded when no bundle is present" "$out" "branded=0"
+
+FAKE="$TMP/POPR.app/Contents/MacOS"
+mkdir -p "$FAKE"
+printf '#!/bin/sh\nexit 0\n' >"$FAKE/terminal-notifier"
+chmod +x "$FAKE/terminal-notifier"
+out="$(POPR_BUNDLE="$TMP/POPR.app" run stop '{"session_id":"s7"}')"
+contains "branded once the bundle exists" "$out" "branded=1"
+
+# 11 · version matches the packaged manifests
 v="$("$POPR" version)"
 for m in "$ROOT/.claude-plugin/plugin.json" "$ROOT/packaging/npm/package.json"; do
     [ -f "$m" ] || continue

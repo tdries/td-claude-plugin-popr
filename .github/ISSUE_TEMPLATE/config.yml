@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Not sure whether it is a bug?
+    url: https://github.com/tdries/td-claude-plugin-popr/discussions
+    about: Ask here first. Bring your `popr doctor` output.
