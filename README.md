@@ -4,7 +4,7 @@
 
 # POPR
 
-**Clickable macOS notifications for Claude Code.**
+**Clickable macOS banners for Claude Code, drawn by POPR itself.**
 
 A session finishes, wants a permission, or hits an error. You hear it, you see it,
 and one click puts you back in the window it came from.
@@ -16,7 +16,7 @@ and one click puts you back in the window it came from.
 
 <img src="assets/banners.svg" width="620" alt="Three POPR notification banners stacked: a finished session, one waiting on a permission, and one that hit an API error.">
 
-<sub>Illustration of the three banner types. Each carries POPR's own name and icon, not a generic terminal tool's.</sub>
+<sub>The three banner types. Each carries its own project's confetti mark, generated from the project name.</sub>
 
 </div>
 
@@ -36,14 +36,14 @@ clicking through to its own window.
 
 | | |
 |---|---|
-| ✅ **Done** | Project, git branch, and a preview of Claude's last answer |
-| ⏳ **Needs you** | Permission prompts, MCP input forms, background agents waiting |
-| ⚠️ **Error** | The turn stopped on an API error, with the error type |
-| 🖱 **One click back** | Reopens the exact editor window that session belongs to |
-| 🧹 **Self cleaning** | A session's banner vanishes the moment you prompt it again |
-| 🎊 **Its own identity** | POPR's name and confetti icon on the banner, and its own row in System Settings |
-| 🎉 **A confetti burst** | An animated pixel burst in the corner when a turn lands, drawn by POPR itself |
-| 🔒 **Nothing leaves** | No network calls, no telemetry. Ever. |
+| **Done** | Project, branch, and a seven word status |
+| **Needs you** | Permission prompts, MCP input forms, background agents waiting |
+| **Error** | The turn stopped on an API error, with the error type |
+| **One click back** | Reopens the exact editor window that session belongs to |
+| **Self cleaning** | A session's banner vanishes the moment you prompt it again |
+| **Confetti DNA** | Every project gets its own mark and its own burst, from its name |
+| **Its own sounds** | Three low swells sharing one timbre, not a system chime |
+| **Nothing leaves** | No network calls, no telemetry. Ever. |
 
 ## Install
 
@@ -109,14 +109,11 @@ gives you an **Open** button. Once, ever.
 
 ### Then, once
 
-1. **System Settings › Notifications › POPR** → Allow notifications **on**.
-   The style is already set to **Alerts** for you, which is what makes a banner wait
-   for your click instead of vanishing after a few seconds. If you want several
-   sessions listed one under the other rather than collapsed into a stack, set
-   **Group notifications** to **Off** while you are there. Check no Focus mode is
-   silencing it.
-2. Reload your editor window (`Developer: Reload Window`), or `/reload-plugins` in a session.
-3. `popr doctor`, then `popr test` or `/popr:test`.
+1. Reload your editor window (`Developer: Reload Window`), or `/reload-plugins` in a session.
+2. `popr doctor`, then `popr test` or `/popr:test`.
+
+No notification permission to grant and no System Settings to visit: POPR draws
+its own banners, so macOS's notification system is not involved at all.
 
 ## Configure
 
@@ -126,19 +123,24 @@ popr config     # interactive, writes ~/.config/popr/config.json
 
 | Setting | Env var | Default | |
 |---|---|---|---|
-| Done sound | `POPR_SOUND_DONE` | `Glass` | a macOS sound name, an audio file path, or `none` |
-| Needs input sound | `POPR_SOUND_ATTENTION` | `Ping` | |
-| Error sound | `POPR_SOUND_ERROR` | `Basso` | |
+| Done sound | `POPR_SOUND_DONE` | POPR's hum | a macOS sound name, an audio file path, or `none` |
+| Needs input sound | `POPR_SOUND_ATTENTION` | POPR's hum | |
+| Error sound | `POPR_SOUND_ERROR` | POPR's hum | |
 | Volume | `POPR_VOLUME` | `1` | 0 to 1 |
 | Say the project name | `POPR_SPEAK` | `false` | useful when you run many sessions |
 | Quiet when the editor is in front | `POPR_QUIET_WHEN_FOCUSED` | `false` | |
 | Force the target app | `POPR_APP` | autodetect | e.g. `Cursor` |
-| Banner picture | `POPR_ICON` | POPR confetti | a PNG path, `app` for the editor icon, `none` |
-| Confetti burst | `POPR_CONFETTI` | `true` | the animated burst when a turn finishes |
-| Confetti size | `POPR_CONFETTI_SIZE` | `180` | pixels |
+| Status length | `POPR_SUMMARY_WORDS` | `7` | words of status on the banner |
+| Confetti | `POPR_CONFETTI` | `true` | the burst out of the banner's mark |
+| Confetti reach | `POPR_CONFETTI_SIZE` | `90` | pixels |
+| Banner style | `POPR_BANNER_STYLE` | `pill` | `pill`, `glass` or `minimal` |
+| Banner mark | `POPR_BANNER_ICON` | the project's own | a PNG to use instead |
+| Font | `POPR_FONT` | system | a family name, e.g. `Styrene A` |
+| Draw our own banners | `POPR_BANNER` | `true` | `false` falls back to macOS notifications |
+| Also post natively | `POPR_NATIVE` | `false` | adds a macOS notification for the history |
 
-Sounds: Basso, Blow, Bottle, Frog, Funk, Glass, Hero, Morse, Ping, Pop, Purr,
-Sosumi, Submarine, Tink.
+Built-in macOS sounds: Basso, Blow, Bottle, Frog, Funk, Glass, Hero, Morse, Ping,
+Pop, Purr, Sosumi, Submarine, Tink.
 
 Environment variables beat plugin options, which beat the config file, which beats
 the defaults. Plugin users can set all of it in Claude Code's plugin settings.
@@ -159,10 +161,10 @@ Four hooks call one bash script.
 
 | Hook | Mode | |
 |---|---|---|
-| `Stop` | `stop` | ✅ banner with a preview of the answer |
-| `Notification` | `attention` | ⏳ banner with Claude's own message |
-| `StopFailure` | `error` | ⚠️ banner with the error type |
-| `UserPromptSubmit` | `clear` | removes that session's stale banner |
+| `Stop` | `stop` | `✓` banner, plus the confetti |
+| `Notification` | `attention` | `⋯` banner with Claude's own message |
+| `StopFailure` | `error` | `✕` banner with the error type |
+| `UserPromptSubmit` | `clear` | removes that session's banner |
 
 **Finding your window.** POPR walks up the process tree until it hits the `.app`
 bundle that launched Claude: VS Code, Cursor, Windsurf, VSCodium, Kiro, Trae,
@@ -173,28 +175,38 @@ that folder open. For anything else it activates the app.
 **Never in your way.** All the slow work happens in a detached subshell and every
 code path exits 0, so a hook cannot slow down or break your turn.
 
-**The confetti.** macOS will not animate anything inside a notification: the
-banner icon comes from the app bundle as a static `.icns`, and an animated GIF
-handed over as the content image is shown as its first frame and nothing more.
-Every notification tool on macOS posts through the same `UNUserNotificationCenter`,
-so switching tools changes nothing — the banner is drawn by the OS.
+**POPR draws its own banners.** macOS gives no control over a notification
+banner. The layout is fixed. The icon comes from the app bundle and cannot be
+emptied — hand it a blank one and it draws a white square, which we tested on a
+bundle identifier macOS had never seen, so no cache was involved. And nothing
+inside one will animate: an animated GIF handed over as the content image is
+accepted, delivered, and then shown as its first frame and nothing else. No other
+tool avoids any of this, because they all post through the same
+`UNUserNotificationCenter` and the banner is drawn by the OS.
 
-So POPR does not ask the notification system for motion. On a finished turn it
-draws its own window: borderless, transparent, click through, above everything,
-gone in about a second. That window is entirely ours, so the animation is too.
-It is a JXA script driven by `osascript`, which ships with macOS, so it needs no
-Xcode and no extra dependency. A permission prompt or an API error gets no
-confetti, because neither is worth celebrating. `POPR_CONFETTI=false` turns it off.
+So POPR stops asking. It draws a non-activating panel: a 30px ivory pill, one
+line, above everything, click-through to nothing but itself, that stays until you
+click it. A JXA script run by `osascript`, which ships with macOS, so it adds no
+dependency and needs no Xcode.
 
-**Why it installs an app.** macOS takes a notification's icon and name from the
-bundle that posts it, and offers no API to override either — `terminal-notifier`
-removed its `-appIcon` and `-sender` flags for exactly this reason. So
-`popr install` builds `~/Applications/POPR.app`: terminal-notifier's own bundle,
-restamped with POPR's identity and icon, ad-hoc signed. Built on your machine it
-carries no quarantine flag, so there is no Gatekeeper warning and no Apple
-Developer account. That is what puts the confetti on the left and gives POPR its
-own row in System Settings. If it cannot be built, POPR falls back to plain
-terminal-notifier and tells you.
+**Confetti DNA.** Every project gets its own mark and its own burst, both seeded
+from the project name with FNV-1a. `acme-widgets` always throws the same pieces
+the same way; `kikl-cockpit` throws different ones. Every mark carries all six
+brand colours exactly once and every burst all four explosion colours twice, so
+the arrangement varies but the weight never does. Chips are stratified across
+quadrants and then centred on their centre of mass, because a mark centred on its
+bounding box still reads as high when the ink sits in the top half.
+
+The burst comes **out of the mark**. That is only possible because we draw the
+banner: macOS never reveals where it put its own, so there was nothing to aim at.
+
+**Its own sounds.** Three swells sharing one timbre, synthesized from the Python
+standard library: G major and settled when a turn lands, rising and unresolved
+when Claude needs you, minor and falling when it broke. macOS's fourteen system
+sounds are all chimes and alerts.
+
+**Never in your way.** All the slow work happens detached and every code path
+exits 0, so a hook cannot slow down or break your turn.
 
 ## Requirements
 
@@ -205,9 +217,9 @@ macOS 13 or later, [Claude Code](https://claude.com/claude-code), plus `jq` and
 
 Honest ones, so nobody files them twice:
 
-- **The banner cannot be animated, and its layout is not yours.** macOS draws it. You fill five slots: icon, name, title, subtitle, body, plus one optional static image, and an animated GIF in that slot renders as a still first frame. This is the OS, not the tool: every macOS notifier posts through the same framework. POPR's confetti sidesteps it by drawing a separate window, which is why the burst is animated and the banner icon is not.
-- **"Stays until clicked" comes set up.** POPR's bundle declares the persistent Alerts style, so macOS defaults to it. You can still override it in System Settings, which always wins.
-- **Stacking is partly macOS's call.** One banner per session is guaranteed. Whether several are listed separately or collapsed into one stack is POPR's "Group notifications" setting: set it to **Off** for a list. There is no way to declare that from the app.
+- **No Notification Center history.** POPR's banners are its own windows, so nothing lands in Notification Center and nothing survives being dismissed. `POPR_NATIVE=true` posts a macOS notification alongside if you want the history back.
+- **Focus and Do Not Disturb are not consulted.** Same reason: POPR is not going through the notification system, so the system's silencing rules do not apply to it.
+- **The status is seven words**, taken from the first sentence of Claude's reply. It is a status, not a summary Claude wrote for the purpose.
 - **The click focuses a window, not a tab.** With several sessions in one folder, the title tells you the project and the preview tells you the conversation.
 - **`.code-workspace` spanning several folders** may open the project folder in a separate window.
 - **macOS only**, by design.

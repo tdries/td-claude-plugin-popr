@@ -191,37 +191,63 @@ Asked and answered, so nobody relitigates it:
 
 | Want | Verdict |
 |---|---|
-| Animated icon in the banner | No, and tested rather than assumed: an animated GIF passed as `-contentImage` is accepted, delivered, and rendered as its first frame only. The banner icon is the bundle's static `.icns`. No other macOS notifier avoids this, because they all post through `UNUserNotificationCenter` and the OS draws the banner. **Worked around** in §4.6 by drawing our own window instead. |
+| Animated icon in the banner | No, and tested rather than assumed: an animated GIF passed as `-contentImage` is accepted, delivered, and rendered as its first frame only. |
+| Removing the banner's left icon | No. It comes from the app bundle, and an `.icns` with every representation fully transparent renders as a **white square**. Verified on a bundle identifier macOS had never seen, so no icon cache was involved. |
+| Any of it via a different notifier | No. `terminal-notifier`, `alerter`, `noti`, `osascript` all post through `UNUserNotificationCenter`; the banner is drawn by the OS, so the tool is irrelevant. |
+
+All of which is why §4.6 stopped asking the notification system for anything.
 | Control the banner layout | No. Five content slots (icon, name, title, subtitle, body) plus an optional right hand image, an action button and a reply field. Arrangement, type, colour, corner radius, position and the slide-in are the system's. |
 | Force "stays until clicked" | Partly. It is the alert style, a per app user setting. The Info.plist key asks for the right default; the user can always override it. |
 | Several notifications stacked | Yes, already. One `-group` per session id, so N live sessions give N banners. macOS collapses them into one stack while that app's "Group notifications" is set to Automatically; setting it to Off lists them individually. That is a user setting with no Info.plist equivalent. |
 
-### 4.6 The confetti overlay
+### 4.6 POPR draws its own banners
 
-Since macOS refuses to animate anything inside a notification (§4.5), POPR stops
-asking it to. On a finished turn it draws its own window:
+Given §4.5, the notification system cannot deliver the product. So POPR does not
+use it. On every event it draws a window of its own:
 
-- Borderless, transparent background, `ignoresMouseEvents` so clicks pass through to whatever is beneath, `NSStatusWindowLevel` so it sits above ordinary windows, and a collection behaviour that puts it on every Space without sliding.
-- Activation policy `Accessory`, so no Dock icon appears and focus is never taken.
-- It plays `assets/burst.gif` once, about 1.3 seconds, then closes.
+- A non-activating `NSPanel` (style mask 128), so it takes a click without stealing focus from whatever you are typing in.
+- 470 x 30, ivory `#F0EEE6`, corner radius half the height, hairline border. One line, grey `#6B6862` at 9.6pt, regular weight throughout.
+- `NSStatusWindowLevel`, on every Space, and it stays until clicked. Clicking runs the same focus command the old notification did.
+- Slots are claimed with `mkdir`, which is atomic, so two sessions finishing at the same instant cannot land on top of each other. A slot is released when its process exits, and reaped if that process died.
 
-Implemented as JXA (`assets/overlay.js`) driven by `osascript`, deliberately, not
-Swift: `osascript` ships with macOS, so this adds no dependency and needs no
-Xcode toolchain at install time. Launched detached, like every other side effect,
-so it cannot make Claude wait.
+Native notifications are off by default (`native`), and `banner=false` falls back
+to them if someone wants Notification Center history, Focus handling, or a
+machine where `osascript` is unavailable.
 
-Fires on `stop` and on `popr test` only. A permission prompt or an API error gets
-no confetti. `confetti` turns it off, `confetti_size` resizes it.
+**Two JXA traps**, both of which cost real time and are commented at the top of
+`assets/banner.js` so they are not rediscovered:
 
-`burst.gif` is generated from the same `GRID` as the logo, so the shape cannot
-drift from the mark. Its colours are deliberately a separate `BURST_PALETTE`
-(`#C15F3C`, `#FFFFFF`, `#F4F3EE`, `#B1ADA1`): the logo has to hold up on ivory
-and in a settings list, while the burst is thrown over whatever is on the
-desktop. The white and off-white chips read as sparkle on a dark wallpaper and
-go quiet on a pale one, which is the trade for that contrast. It needs Pillow, which stays a dev-time dependency like
-librsvg because the GIF is committed and users never regenerate it.
+1. `someNSColor.CGColor` returns a pointer owned by a temporary. The first use survives by luck and the *second* crashes the process with no error, no output, and no stack. Nothing in that file touches `CGColor`; `NSBox` takes `NSColor` directly.
+2. `addSubview` on an `NSBox` goes into its `contentView`, which is inset by `contentViewMargins`. Every child then sits shifted by an amount that appears in no coordinate you wrote. The root is a plain `NSView` with the box as its first subview.
 
-## 5 · Configuration
+Vertical placement of the text is a measured constant, not a derived one:
+`NSTextField` does not put a single line where its `fittingSize` implies. It was
+calibrated by rendering the same banner at a range of offsets, screenshotting,
+and computing the ink centroid of each.
+
+### 4.7 Confetti DNA
+
+Every project gets its own mark and its own burst, both seeded from the project
+name with FNV-1a and drawn procedurally. `acme-widgets` always throws the same
+pieces the same way. Nothing is stored and no asset is generated.
+
+Two rules keep the marks comparable rather than merely different:
+
+- **Every colour, exactly once.** A mark carries all six brand colours; a burst carries all four explosion colours twice. Only the arrangement varies, so no project draws a dull one by chance.
+- **Balanced by construction.** Two chips per row on a 3x3 grid, laid inside a margin. Balancing the rows up front beats correcting afterwards: a shift large enough to fix a lopsided draw is also large enough to push a chip out of the icon, and clamping that shift silently cancels it — which is exactly what happened on the first attempt.
+
+The burst comes out of the mark, which is only possible because we draw the
+banner. macOS never reveals where it puts its own, so there was nothing to aim at.
+
+### 4.8 Sound
+
+Three swells sharing one timbre, synthesized in `assets/make_sound.py` from the
+standard library: G major and settled when a turn lands, rising and unresolved
+when Claude needs you, minor and falling when it broke. macOS's fourteen system
+sounds are all chimes or alerts, and a stock `Ping` next to a bespoke banner
+would give the whole thing away.
+
+## 5 · Configuration## 5 · Configuration
 
 Three surfaces. Two of them are free, in that they are native features rather
 than code POPR has to own.
@@ -253,8 +279,15 @@ degrades rather than failing.
 | `quiet_when_focused` | `false` | skip the alert when the target app is already frontmost |
 | `app` | autodetect | force the target app, e.g. `Cursor` |
 | `icon` | bundled logo | path to a PNG, `app` for the host app icon, `none` to hide |
-| `confetti` | `true` | the animated burst on a finished turn |
-| `confetti_size` | `180` | its size in pixels |
+| `confetti` | `true` | the burst out of the banner's mark |
+| `confetti_size` | `90` | how far it reaches, in pixels |
+| `banner` | `true` | draw our own banner instead of a macOS notification |
+| `banner_style` | `pill` | `pill`, `glass` or `minimal` |
+| `banner_icon` | the project's own | a PNG to use instead of the generated mark |
+| `banner_seconds` | `900` | backstop before a banner stops waiting for a click |
+| `native` | `false` | also post a macOS notification, for the history |
+| `font` | system | a family name, e.g. `Styrene A` |
+| `summary_words` | `7` | words of status the banner shows |
 
 ## 6 · Logo
 
@@ -312,6 +345,7 @@ succeeds before the tap repo or the npm account exist.
 Deliberately not built, and not to be added without a new design:
 
 - A menu bar app or any GUI beyond the two config surfaces above.
+- Rebuilding Notification Center history, Focus awareness or Do Not Disturb on top of our own banners. `native=true` hands those back to macOS for anyone who wants them.
 - `.pkg`, `.dmg`, `--cask`, Developer ID signing, notarization.
 - A Notification Content Extension, and with it any animated or custom drawn banner.
 - Windows or Linux support.

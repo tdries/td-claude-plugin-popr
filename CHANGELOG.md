@@ -3,6 +3,26 @@
 All notable changes to POPR. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [SemVer](https://semver.org/).
 
+## [1.3.0] - 2026-09-10
+
+POPR stops using macOS notifications and draws its own banners.
+
+### Added
+- **Its own banners.** A non-activating panel, 470x30, ivory pill, one line, staying until clicked. macOS notifications are no longer posted at all by default. The reason is §4.5 of the design: the layout is fixed, the app-bundle icon cannot be removed (a fully transparent `.icns` renders a white square, verified on a bundle id macOS had never seen), and nothing inside a notification will animate. No alternative notifier avoids any of it, because they all post through `UNUserNotificationCenter`.
+- **Confetti DNA.** Every project gets its own mark and its own burst, seeded from the project name with FNV-1a and drawn procedurally. Every mark carries all six brand colours exactly once, every burst all four explosion colours twice, so arrangements differ but weight never does.
+- **The burst comes out of the mark**, which only became possible once we drew the banner ourselves and therefore knew where it was.
+- **Three synthesized sounds** sharing one timbre: settled on finish, rising and unresolved when Claude needs you, minor and falling on error.
+- Settings: `banner`, `banner_style`, `banner_icon`, `banner_seconds`, `native`, `font`, `summary_words`.
+
+### Changed
+- The banner shows a **status, not an excerpt**: the first sentence of Claude's reply, at most seven words, never an ellipsis.
+- Typographic marks `✓ ⋯ ✕` replace emoji.
+- The logo is down to eight pieces, none smaller than three cells.
+- Confetti reach halved to 90px.
+
+### Removed
+- `burst.gif`, `overlay.js`, the GIF generator and the Pillow development dependency. The burst is procedural now, so there is no animation asset to keep in sync with the mark.
+
 ## [1.1.1] - 2026-09-10
 
 ### Changed

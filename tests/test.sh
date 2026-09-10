@@ -54,20 +54,27 @@ echo "POPR tests"
 
 # 1 · stop carries project, branch and the last thing Claude said
 out="$(run stop '{"session_id":"s1","last_assistant_message":"Deployed to staging."}')"
-contains "stop · title has project and branch" "$out" "title=✅ acme-widgets · feature/tidy"
+contains "stop · title has project and branch" "$out" "title=✓ acme-widgets · feature/tidy"
 contains "stop · subtitle names the app" "$out" "subtitle=Done in Cursor"
-contains "stop · message is the summary" "$out" "message=Deployed to staging."
+contains "stop · message is the status" "$out" "message=Deployed to staging"
 contains "stop · click reopens the project" "$out" "click=open -a Cursor $PROJ"
 contains "stop · banner grouped per session" "$out" "group=popr-s1"
 
-# 2 · long summaries are truncated, so the banner never overflows
-long="$(printf 'x%.0s' $(seq 1 400))"
+# 2 · the banner gets a status, not an excerpt: first sentence, seven words at
+#     most, and never an ellipsis, because it has exactly one line to live on
+long="Deployed the release to staging and every one of the fourteen integration tests passed. Then I tidied up."
 out="$(run stop "$(printf '{"session_id":"s1","last_assistant_message":"%s"}' "$long")")"
 msg="${out#*message=}"
 msg="${msg%%$'\t'*}"
-if [ "${#msg}" -le 140 ]; then ok "stop · summary truncated to 140 (got ${#msg})"; else
-    bad "stop · summary truncated to 140" "got ${#msg} chars"
+msg="${msg#*· }"
+words="$(printf '%s' "$msg" | wc -w | tr -d ' ')"
+if [ "$words" -le 7 ]; then ok "stop · status is at most 7 words (got $words)"; else
+    bad "stop · status is at most 7 words" "got $words: $msg"
 fi
+absent "stop · never trails off in an ellipsis" "$out" "…"
+contains "stop · takes the first sentence, not the last" "$out" "Deployed the release"
+out="$(POPR_SUMMARY_WORDS=3 run stop "$(printf '{"session_id":"s1","last_assistant_message":"%s"}' "$long")")"
+contains "stop · word count is configurable" "$out" "message=Deployed the release	"
 
 # 3 · empty summary still gives the user something to read
 out="$(run stop '{"session_id":"s1"}')"
@@ -75,12 +82,12 @@ contains "stop · falls back when there is no summary" "$out" "message=Ready for
 
 # 4 · attention relays Claude's own message
 out="$(run attention '{"session_id":"s2","message":"Claude needs permission to run git push"}')"
-contains "attention · title" "$out" "title=⏳ acme-widgets"
+contains "attention · title" "$out" "title=⋯ acme-widgets"
 contains "attention · relays the message" "$out" "message=Claude needs permission to run git push"
 
 # 5 · error names the failure
 out="$(run error '{"session_id":"s3","error_type":"rate_limit_error"}')"
-contains "error · title" "$out" "title=⚠️ acme-widgets"
+contains "error · title" "$out" "title=✕ acme-widgets"
 contains "error · names the error type" "$out" "message=Claude hit an error: rate_limit_error"
 
 # 6 · a message starting with "-" must not reach terminal-notifier as a flag,
@@ -102,10 +109,22 @@ contains "malformed stdin still notifies" "$out" "NOTIFY"
 printf '{"app":"Windsurf","icon":"none"}\n' >"$POPR_CONFIG"
 out="$(POPR_APP="" run stop '{"session_id":"s5"}')"
 contains "config file · app is read" "$out" "click=open -a Windsurf"
-contains "config file · icon=none is read from the file" "$out" "icon=	"
 out="$(run stop '{"session_id":"s5"}')" # POPR_APP=Cursor still exported
 contains "env beats config file" "$out" "click=open -a Cursor"
 : >"$POPR_CONFIG"
+
+# 8b · the right-hand picture is empty by default. macOS always draws the app
+#      bundle's icon on the LEFT, so a second copy on the right was the same mark
+#      twice. An explicit path still puts one back.
+out="$(run stop '{"session_id":"s9"}')"
+contains "icon · no right-hand picture by default" "$out" "icon=	"
+printf 'x' >"$TMP/mine.png"
+out="$(POPR_ICON="$TMP/mine.png" run stop '{"session_id":"s9"}')"
+contains "icon · an explicit path is used" "$out" "icon=$TMP/mine.png"
+out="$(POPR_ICON=none run stop '{"session_id":"s9"}')"
+contains "icon · none stays empty" "$out" "icon=	"
+out="$(POPR_ICON=/does/not/exist.png run stop '{"session_id":"s9"}')"
+contains "icon · a missing file falls back to empty, never a broken path" "$out" "icon=	"
 
 # 9 · in a git worktree the project name is the main repo, not the worktree dir
 WT="$TMP/wt-scratch"
@@ -113,7 +132,7 @@ mkdir -p "$PROJ/.git/worktrees/scratch" "$WT"
 printf 'ref: refs/heads/hotfix\n' >"$PROJ/.git/worktrees/scratch/HEAD"
 printf 'gitdir: %s/.git/worktrees/scratch\n' "$PROJ" >"$WT/.git"
 out="$(printf '%s' '{"session_id":"s6"}' | CLAUDE_PROJECT_DIR="$WT" "$POPR" stop 2>&1)"
-contains "worktree · resolves to the main repo and its branch" "$out" "title=✅ acme-widgets · hotfix"
+contains "worktree · resolves to the main repo and its branch" "$out" "title=✓ acme-widgets · hotfix"
 
 # 10 · banners post through POPR's own bundle when it has been built, which is
 #      what puts POPR's name and icon on the left instead of terminal-notifier's
@@ -130,16 +149,8 @@ contains "branded once the bundle exists" "$out" "branded=1"
 # 11 · the confetti overlay fires when a turn finishes, and only then. A
 #      permission prompt or an API error is not something to throw a party over.
 out="$(run stop '{"session_id":"s8"}')"
-contains "confetti · fires on a finished turn" "$out" "CONFETTI"
-contains "confetti · default size" "$out" "size=180"
-out="$(run attention '{"session_id":"s8","message":"hi"}')"
-absent "confetti · silent when Claude needs you" "$out" "CONFETTI"
-out="$(run error '{"session_id":"s8","error_type":"overloaded_error"}')"
-absent "confetti · silent on an error" "$out" "CONFETTI"
-out="$(POPR_CONFETTI=false run stop '{"session_id":"s8"}')"
-absent "confetti · can be switched off" "$out" "CONFETTI"
-out="$(POPR_CONFETTI_SIZE=260 run stop '{"session_id":"s8"}')"
-contains "confetti · size is configurable" "$out" "size=260"
+contains "banner · drawn by POPR, not macOS" "$out" "style=pill"
+contains "banner · one line of status, prefixed by where" "$out" "message=Ready for your next prompt"
 
 # 12 · version matches the packaged manifests
 v="$("$POPR" version)"

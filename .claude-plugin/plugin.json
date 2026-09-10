@@ -1,7 +1,7 @@
 {
   "name": "popr",
   "displayName": "POPR",
-  "version": "1.1.1",
+  "version": "1.3.0",
   "description": "Hear and see a clickable macOS notification when a Claude Code session finishes, needs your input, or hits an error. Click it to jump back to the right window.",
   "author": {
     "name": "Tim Dries",
@@ -21,20 +21,20 @@
     "sound_done": {
       "type": "string",
       "title": "Done sound",
-      "description": "macOS sound name (Glass, Hero, Ping, Pop, Submarine, Funk, Tink), a full path to an audio file, or none to mute.",
-      "default": "Glass"
+      "description": "POPR's own low hum by default. Or a macOS sound name (Glass, Hero, Ping...), a full path to an audio file, or none to mute.",
+      "default": ""
     },
     "sound_attention": {
       "type": "string",
       "title": "Needs input sound",
       "description": "Sound when Claude waits for a permission or your input. Use none to mute.",
-      "default": "Ping"
+      "default": ""
     },
     "sound_error": {
       "type": "string",
       "title": "Error sound",
       "description": "Sound when the turn stops on an API error. Use none to mute.",
-      "default": "Basso"
+      "default": ""
     },
     "volume": {
       "type": "string",
@@ -62,21 +62,51 @@
     },
     "icon": {
       "type": "string",
-      "title": "Banner picture",
-      "description": "Full path to a PNG. Leave empty for the POPR confetti, app for the editor icon, none to hide it.",
+      "title": "Extra banner picture",
+      "description": "Picture on the RIGHT of the banner. Leave empty for none. A full path to a PNG adds one, or 'app' for the editor's icon. The logo on the LEFT is POPR's own app icon and macOS does not allow it to be changed or removed.",
       "default": ""
     },
     "confetti": {
       "type": "boolean",
       "title": "Confetti burst",
-      "description": "Play an animated pixel confetti burst in the corner when a turn finishes. POPR draws this itself; macOS will not animate anything inside a notification banner.",
+      "description": "Throw a burst of confetti out of the banner's mark when a turn finishes. Each project gets its own arrangement, generated from its name.",
       "default": true
     },
     "confetti_size": {
       "type": "string",
       "title": "Confetti size",
-      "description": "Size of the burst in pixels.",
-      "default": "180"
+      "description": "How far the burst reaches, in pixels.",
+      "default": "90"
+    },
+    "banner_style": {
+      "type": "string",
+      "title": "Banner style",
+      "description": "pill (ivory, the default), glass (blurred dark) or minimal.",
+      "default": "pill"
+    },
+    "banner": {
+      "type": "boolean",
+      "title": "Draw POPR's own banners",
+      "description": "On by default. Turn off to fall back to macOS notifications, which cannot be styled or animated.",
+      "default": true
+    },
+    "native": {
+      "type": "boolean",
+      "title": "Also post a macOS notification",
+      "description": "Off by default. Turn on to keep Notification Center history and Focus handling alongside POPR's banner.",
+      "default": false
+    },
+    "summary_words": {
+      "type": "string",
+      "title": "Status length",
+      "description": "How many words of status the banner shows. It has one line, so this is a status rather than a summary.",
+      "default": "7"
+    },
+    "font": {
+      "type": "string",
+      "title": "Font",
+      "description": "A font family name. Empty uses the system font. Anthropic's own faces (Styrene, Tiempos) are licensed commercially and cannot ship here, but are used if installed.",
+      "default": ""
     }
   }
 }

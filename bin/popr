@@ -19,7 +19,7 @@
 # See `popr help` for the keys.
 
 set -u
-VERSION="1.1.1"
+VERSION="1.3.0"
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:${PATH:-}"
 
 MODE="${1:-stop}"
@@ -181,21 +181,69 @@ if [ -d "$HOST_APP" ] && has defaults; then
     fi
 fi
 
+# The picture on the RIGHT of the banner, which is optional. The one on the LEFT
+# is the app bundle's icon and macOS always draws it: hand it an empty icns and
+# it substitutes a white square rather than nothing (tested on a bundle id it had
+# never seen, so no cache was involved). So the left slot is the logo, and the
+# right one defaults to empty rather than repeating the same mark twice.
 pick_icon() {
-    local o f
+    local o
     o="$(opt icon "")"
     case "$(lower "$o")" in
         none | off | false) return 0 ;;
         app) printf '%s' "$APP_ICON"; return 0 ;;
-        "") ;;
-        *) if [ -f "$o" ]; then printf '%s' "$o"; return 0; fi ;;
+        "") [ -f "$ROOT/assets/custom.png" ] && printf '%s' "$ROOT/assets/custom.png"; return 0 ;;
+        *) [ -f "$o" ] && printf '%s' "$o"; return 0 ;;
     esac
-    for f in "$ROOT/assets/custom.png" "$ROOT/assets/popr-256.png"; do
-        [ -f "$f" ] && { printf '%s' "$f"; return 0; }
-    done
-    printf '%s' "$APP_ICON"
 }
 ICON="$(pick_icon)"
+
+# ---------------------------------------------------------------- banners
+# POPR draws its own banners rather than posting macOS notifications. macOS gives
+# no control over a notification banner: fixed layout, an app-bundle icon that
+# cannot be emptied, and nothing in it will animate. Ours is a window we own.
+#
+# One banner per session, stacked. Slots are claimed with mkdir, which is atomic,
+# so two sessions finishing at the same moment cannot land on the same one.
+BANNER_JS="$ROOT/assets/banner.js"
+# Empty by default: the banner draws each project its own mark from the DNA.
+# Point banner_icon at a PNG to use fixed artwork instead.
+STATE_DIR="${POPR_STATE:-${TMPDIR:-/tmp}/popr-$(id -u)}"
+
+slot_dir() { printf '%s/slot-%s' "$STATE_DIR" "$1"; }
+
+# Drop slots whose banner process has gone, so a crash cannot leak one forever.
+reap_slots() {
+    local d pid
+    for d in "$STATE_DIR"/slot-*; do
+        [ -d "$d" ] || continue
+        pid="$(cat "$d/pid" 2>/dev/null)"
+        if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then continue; fi
+        rm -rf "$d"
+    done
+}
+
+# Take down this session's existing banner, so a session never stacks on itself.
+drop_session_banner() {
+    local d pid
+    for d in "$STATE_DIR"/slot-*; do
+        [ -d "$d" ] || continue
+        [ "$(cat "$d/session" 2>/dev/null)" = "$SESSION_ID" ] || continue
+        pid="$(cat "$d/pid" 2>/dev/null)"
+        [ -n "$pid" ] && kill "$pid" 2>/dev/null
+        rm -rf "$d"
+    done
+}
+
+claim_slot() {
+    local i
+    mkdir -p "$STATE_DIR" 2>/dev/null
+    reap_slots
+    for i in 0 1 2 3 4 5 6 7; do
+        if mkdir "$(slot_dir "$i")" 2>/dev/null; then printf '%s' "$i"; return 0; fi
+    done
+    printf '0'
+}
 
 # ---------------------------------------------------------------- notifier
 # macOS takes a notification's icon and name from the bundle that posts it, and
@@ -227,6 +275,13 @@ is_focused() {
     [ -n "$front" ] && [ "$front" = "$HOST_APP" ]
 }
 
+# POPR ships its own sounds: three swells sharing one timbre, so they read as
+# one instrument and you can tell them apart without looking. Falls back to the
+# macOS system sound if the bundled file is missing.
+snd() { # name macos-fallback
+    if [ -f "$ROOT/assets/$1.wav" ]; then printf '%s' "$ROOT/assets/$1.wav"; else printf '%s' "$2"; fi
+}
+
 play_sound() {
     [ -n "$DRY" ] && return 0
     local s="$1" f
@@ -246,20 +301,12 @@ play_sound() {
 # tested it). The only way to get motion is to stop asking the notification
 # system for it, so POPR draws its own window: borderless, transparent, click
 # through, on top, gone in about a second.
-confetti() {
+# Arm the confetti for the banner about to be drawn. The banner fires it itself,
+# centred on its own logo, because only it knows where that ended up. The shape
+# is seeded from the project slug, so every project has its own burst.
+burst_arm() {
     is_true "$(opt confetti true)" || return 0
-    [ -f "$ROOT/assets/burst.gif" ] && [ -f "$ROOT/assets/overlay.js" ] || return 0
-    has osascript || return 0
-    local size seconds
-    size="$(opt confetti_size 180)"
-    seconds=1.3 # one cycle of burst.gif is 1.26s; the window outlives it, just
-    if [ -n "$DRY" ]; then
-        printf 'CONFETTI\tgif=%s\tsize=%s\tseconds=%s\n' "$ROOT/assets/burst.gif" "$size" "$seconds"
-        return 0
-    fi
-    (osascript -l JavaScript "$ROOT/assets/overlay.js" \
-        "$ROOT/assets/burst.gif" "$seconds" "$size" >/dev/null 2>&1 &)
-    return 0
+    BURST_DNA="$PROJECT_NAME"
 }
 
 speak() {
@@ -269,12 +316,38 @@ speak() {
     return 0
 }
 
+BURST_DNA=""   # project slug, set by the caller when this event deserves confetti
+
 notify() {
     local title="$1" subtitle="$2" message="$3"
+    local style slot dir line
+    style="$(opt banner_style pill)"
+    # One line means only what matters: the mark, the project, the status. Which
+    # app it happened in is what the click is for.
+    line="$message"
+
     if [ -n "$DRY" ]; then
-        printf 'NOTIFY\ttitle=%s\tsubtitle=%s\tmessage=%s\tgroup=%s\ticon=%s\tbranded=%s\tclick=%s\n' \
-            "$title" "$subtitle" "$message" "$GROUP" "${ICON:-}" "$BRANDED" "$CLICK_CMD"
+        printf 'NOTIFY\ttitle=%s\tsubtitle=%s\tmessage=%s\tgroup=%s\ticon=%s\tbranded=%s\tstyle=%s\tclick=%s\n' \
+            "$title" "$subtitle" "$message" "$GROUP" "${ICON:-}" "$BRANDED" "$style" "$CLICK_CMD"
         return 0
+    fi
+
+    # Our own banner, unless it is unavailable or explicitly turned off.
+    if is_true "$(opt banner true)" && [ -f "$BANNER_JS" ] && has osascript; then
+        drop_session_banner
+        slot="$(claim_slot)"
+        dir="$(slot_dir "$slot")"
+        printf '%s' "$SESSION_ID" >"$dir/session" 2>/dev/null
+        (
+            osascript -l JavaScript "$BANNER_JS" "$title" "$line" \
+                "$(opt banner_icon "")" "$slot" "$style" "$CLICK_CMD" \
+                "$(opt banner_seconds 900)" "$(opt font "")" \
+                "$BURST_DNA" "$(opt confetti_size 90)" >/dev/null 2>&1
+            rm -rf "$dir"
+        ) &
+        printf '%s' "$!" >"$dir/pid" 2>/dev/null
+        # The native notification is off by default: POPR's banner replaces it.
+        is_true "$(opt native false)" || return 0
     fi
     if [ -n "$NOTIFIER" ]; then
         local args=(-title "$title" -subtitle "$subtitle" -message "$message" -group "$GROUP" -execute "$CLICK_CMD")
@@ -300,7 +373,12 @@ summary() {
     fi
     [ -n "$s" ] || return 0
     s="$(clean "$(printf '%s' "$s" | tr -d '`*#>')")"
-    printf '%s' "$s" | jq -Rrs 'if length > 140 then .[0:139] + "…" else . end' 2>/dev/null
+    # A status, not an excerpt: first sentence, at most seven words. The banner
+    # gives one line and nothing is allowed to trail off into an ellipsis, so
+    # this shortens by summarising rather than by cutting.
+    printf '%s' "$s" | jq -Rrs --argjson n "$(opt summary_words 7)" '
+      (split(".") | .[0] | split(" ") | map(select(length > 0)))
+      | .[0:$n] | join(" ")' 2>/dev/null
 }
 
 # ---------------------------------------------------------------- hook wiring
@@ -557,9 +635,17 @@ doctor() {
     if ! is_true "$(opt confetti true)"; then
         printf '  %-20s %s\n' "confetti" "off"
     elif [ -f "$ROOT/assets/burst.gif" ] && [ -f "$ROOT/assets/overlay.js" ]; then
-        printf '  %-20s %s\n' "confetti" "on, $(opt confetti_size 180)px"
+        printf '  %-20s %s\n' "confetti" "on, $(opt confetti_size 90)px"
     else
         printf '  %-20s %s\n' "confetti" "on, but assets are missing"
+    fi
+    if is_true "$(opt banner true)" && [ -f "$BANNER_JS" ]; then
+        printf '  %-20s %s\n' "banners" "POPR's own, style $(opt banner_style pill)"
+    else
+        printf '  %-20s %s\n' "banners" "macOS notifications"
+    fi
+    if is_true "$(opt native false)"; then
+        printf '  %-20s %s\n' "native notif" "also posting to Notification Center"
     fi
     printf '  %-20s %s\n' "log" "$LOG_FILE"
     has terminal-notifier || echo "  fix: brew install terminal-notifier"
@@ -584,16 +670,26 @@ POPR v$VERSION · clickable macOS notifications for Claude Code
   popr version
 
 Settings (POPR_<KEY> env > plugin option > $CONFIG_FILE > default):
-  sound_done          Glass     macOS sound name, audio file path, or none
-  sound_attention     Ping
-  sound_error         Basso
+  sound_done          bundled   POPR's own hum. Or a macOS sound name
+                                (Glass, Hero, Ping...), an audio file, or none
+  sound_attention     bundled
+  sound_error         bundled
   volume              1         0 to 1
   speak               false     also say the project name
   quiet_when_focused  false     skip when the target app is already in front
   app                 auto      force the target app, e.g. Cursor
-  icon                bundled   PNG path, "app" for the host icon, or none
-  confetti            true      the animated burst when a turn finishes
-  confetti_size       180       its size in pixels
+  icon                none      picture on the RIGHT: a PNG path, "app" for the
+                                host app's icon, or none. The logo on the LEFT
+                                is the bundle's icon and cannot be changed here.
+  banner              true      draw POPR's own banner instead of a macOS one
+  banner_style        pill      pill, glass or minimal
+  banner_icon         auto      a PNG to use instead of the project's own mark
+  banner_seconds      900       backstop before a banner gives up waiting
+  native              false     also post a macOS notification
+  font                system    a font family name, e.g. "Styrene A"
+  confetti            true      the burst out of the banner's logo when a turn ends
+  confetti_size       90        how far it reaches, in pixels
+  summary_words       7         how many words of status the banner shows
 EOF
 }
 
@@ -606,9 +702,9 @@ case "$MODE" in
     uninstall) uninstall_cmd; exit 0 ;;
     config) config_cmd; exit 0 ;;
     test)
-        play_sound "$(opt sound_done Glass)"
-        notify "POPR test · $LABEL" "Click me" "This should bring $WHERE to the front"
-        confetti
+        play_sound "$(opt sound_done "$(snd pop Glass)")"
+        burst_arm
+        notify "✓ $LABEL" "POPR test" "Click the banner to bring $WHERE to the front"
         speak "POPR test for $PROJECT_NAME"
         log "test fired for $LABEL in $WHERE"
         echo "Test notification sent for $LABEL in $WHERE. Clicking it runs: $CLICK_CMD"
@@ -616,6 +712,7 @@ case "$MODE" in
         exit 0
         ;;
     clear)
+        drop_session_banner
         [ -n "$NOTIFIER" ] && ("$NOTIFIER" -remove "$GROUP" >/dev/null 2>&1 &)
         exit 0
         ;;
@@ -636,22 +733,22 @@ run() {
             [ -n "$DRY" ] || sleep 0.4
             msg="$(summary)"
             [ -n "$msg" ] || msg="Ready for your next prompt"
-            play_sound "$(opt sound_done Glass)"
-            notify "✅ $LABEL" "Done in $WHERE" "$msg"
-            confetti
+            play_sound "$(opt sound_done "$(snd pop Glass)")"
+            burst_arm
+            notify "✓ $LABEL" "Done in $WHERE" "$msg"
             speak "$PROJECT_NAME is done"
             ;;
         attention)
             msg="$(clean "$(jget '.message')")"
             [ -n "$msg" ] || msg="Claude is waiting for you"
-            play_sound "$(opt sound_attention Ping)"
-            notify "⏳ $LABEL" "Needs you in $WHERE" "$msg"
+            play_sound "$(opt sound_attention "$(snd ask Ping)")"
+            notify "⋯ $LABEL" "Needs you in $WHERE" "$msg"
             speak "$PROJECT_NAME needs you"
             ;;
         error)
             err="$(clean "$(jget '.error_type // .error // .reason')")"
-            play_sound "$(opt sound_error Basso)"
-            notify "⚠️ $LABEL" "Stopped in $WHERE" "Claude hit an error${err:+: $err}"
+            play_sound "$(opt sound_error "$(snd err Basso)")"
+            notify "✕ $LABEL" "Stopped in $WHERE" "Claude hit an error${err:+: $err}"
             speak "$PROJECT_NAME hit an error"
             ;;
     esac
