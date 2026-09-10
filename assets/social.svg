@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 640" width="1280" height="640">
+<style>.n{font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif}</style>
+<rect width="1280" height="640" fill="#F0EEE6"/>
+<g transform="translate(122,192) scale(16)" shape-rendering="crispEdges">
+  <rect x="7" y="7" width="2" height="2" fill="#D97757"/>
+  <rect x="7" y="3" width="1" height="1" fill="#CC785C"/><rect x="10" y="4" width="1" height="1" fill="#6A9BCC"/>
+  <rect x="11" y="7" width="1" height="1" fill="#BCD1CA"/><rect x="10" y="10" width="1" height="1" fill="#CBCADB"/>
+  <rect x="7" y="11" width="1" height="1" fill="#BF9C88"/><rect x="4" y="10" width="1" height="1" fill="#6A9BCC"/>
+  <rect x="3" y="7" width="1" height="1" fill="#CC785C"/><rect x="4" y="4" width="1" height="1" fill="#BCD1CA"/>
+  <rect x="7" y="0" width="1" height="1" fill="#D97757"/><rect x="12" y="2" width="2" height="2" fill="#D97757"/>
+  <rect x="14" y="7" width="1" height="1" fill="#D97757"/><rect x="12" y="12" width="1" height="1" fill="#CC785C"/>
+  <rect x="7" y="14" width="2" height="2" fill="#D97757"/><rect x="2" y="12" width="1" height="1" fill="#BCD1CA"/>
+  <rect x="0" y="7" width="1" height="1" fill="#BF9C88"/><rect x="2" y="2" width="2" height="2" fill="#D97757"/>
+  <rect x="5" y="1" width="1" height="1" fill="#CBCADB"/><rect x="13" y="10" width="1" height="1" fill="#6A9BCC"/>
+  <rect x="1" y="10" width="1" height="1" fill="#CBCADB"/><rect x="10" y="13" width="1" height="1" fill="#6A9BCC"/>
+  <rect x="14" y="4" width="1" height="1" fill="#BF9C88"/><rect x="0" y="4" width="1" height="1" fill="#BCD1CA"/>
+  <rect x="9" y="5" width="1" height="1" fill="#BF9C88"/><rect x="5" y="9" width="1" height="1" fill="#BCD1CA"/>
+  <rect x="5" y="5" width="1" height="1" fill="#6A9BCC"/><rect x="10" y="8" width="1" height="1" fill="#CC785C"/>
+  <rect x="12" y="6" width="1" height="1" fill="#CBCADB"/><rect x="2" y="6" width="1" height="1" fill="#D97757"/>
+  <rect x="5" y="12" width="1" height="1" fill="#CC785C"/><rect x="9" y="10" width="1" height="1" fill="#BCD1CA"/>
+  <rect x="3" y="3" width="1" height="1" fill="#CBCADB"/>
+</g>
+<text class="n" x="500" y="258" font-size="112" font-weight="800" fill="#191919" letter-spacing="2">POPR</text>
+<text class="n" x="506" y="330" font-size="38" font-weight="600" fill="#D97757">Clickable macOS notifications</text>
+<text class="n" x="506" y="382" font-size="38" font-weight="600" fill="#D97757">for Claude Code</text>
+<text class="n" x="506" y="452" font-size="25" fill="#666663">A session finishes, needs you, or errors. One click and you</text>
+<text class="n" x="506" y="488" font-size="25" fill="#666663">are back in the window it came from.</text>
+<rect x="506" y="524" width="330" height="46" rx="9" fill="#191919"/>
+<text class="n" x="526" y="554" font-size="21" fill="#F0EEE6" font-family="ui-monospace,Menlo,monospace">brew install tdries/tap/popr</text>
+</svg>

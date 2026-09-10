@@ -23,6 +23,16 @@ shellcheck bin/popr install.sh tests/test.sh "packaging/Install POPR.command"
 python3 assets/make_logo.py --demo                             # only if you touched the logo
 ```
 
+If you change the logo, regenerate everything derived from it:
+
+```bash
+python3 assets/make_logo.py --icns
+rsvg-convert -w 1280 -h 640 -b '#F0EEE6' assets/social.svg -o assets/social-preview.png
+```
+
+`librsvg` is a dev-time dependency for that last line only (`brew install librsvg`).
+It is never needed at runtime.
+
 CI runs exactly these on a macOS runner.
 
 ## Testing without spamming yourself
@@ -54,7 +64,8 @@ not depend on the developer's own machine.
 | Path | |
 |---|---|
 | `bin/popr` | the whole engine |
-| `assets/make_logo.py` | the logo, as a pixel grid; everything else in `assets/` is generated |
+| `assets/make_logo.py` | the logo, as a pixel grid; the SVGs, PNGs and `.icns` beside it are all generated from it |
+| `assets/social.svg` | the GitHub social preview card, hand authored |
 | `.claude-plugin/` | plugin manifest and marketplace entry |
 | `packaging/` | Homebrew formula, npm shim, double click installer |
 | `docs/DESIGN.md` | why it is built this way, including what macOS refuses to allow |
