@@ -1,6 +1,6 @@
 {
   "name": "popr-cli",
-  "version": "1.3.1",
+  "version": "1.4.0",
   "description": "Clickable macOS notifications when a Claude Code session finishes, needs you, or hits an error",
   "bin": {
     "popr": "bin/popr.js"

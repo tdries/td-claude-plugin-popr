@@ -3,6 +3,23 @@
 All notable changes to POPR. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [SemVer](https://semver.org/).
 
+## [1.4.0] - 2026-09-10
+
+Hardening pass.
+
+### Fixed
+- **POPR could hold up the hook that called it.** The banner was launched in a background subshell that still held the parent's stdout, so the calling shell waited for it — and a banner that waits for a click waits a long time. `popr install` hung outright, and in a `Stop` hook it would have stalled Claude for up to fifteen minutes per turn. The subshell now gives up its inherited stdio, and a test times the real path end to end rather than asserting about the source.
+- `banner_style: minimal` was documented in the plugin settings, the README and `popr help`, but nothing branched on it any more after the one-line rewrite. Removed rather than left as a setting that quietly does nothing. `pill` and `glass` are both real.
+
+### Changed
+- **`terminal-notifier` is no longer required.** POPR draws its own banners, so it is only needed for the optional native path. Installing no longer fails without it, and `popr doctor` lists it as optional. `jq` remains the one hard dependency.
+- The banner appears on the screen the **pointer** is on. On a two screen desk, "main" is wherever the menu bar lives, which is regularly not the one you are looking at.
+- `popr uninstall` closes any open banners and clears its state directory instead of leaving processes running.
+- `popr config` covers confetti, status length, banner style and font; passing an empty sound now means "POPR's own" rather than pinning a macOS one.
+
+### Added
+- `tests/banner-rules.js`: the mark and burst rules checked against eight project names including unicode and single characters — six chips, all six colours exactly once, nothing outside the icon, mass within a pixel of centre, deterministic per name, and different between names.
+
 ## [1.3.1] - 2026-09-10
 
 ### Fixed

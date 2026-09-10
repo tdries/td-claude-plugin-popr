@@ -19,7 +19,7 @@
 # See `popr help` for the keys.
 
 set -u
-VERSION="1.3.1"
+VERSION="1.4.0"
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:${PATH:-}"
 
 MODE="${1:-stop}"
@@ -338,13 +338,17 @@ notify() {
         slot="$(claim_slot)"
         dir="$(slot_dir "$slot")"
         printf '%s' "$SESSION_ID" >"$dir/session" 2>/dev/null
+        # Fully detached, stdio and all. Redirecting only osascript is not
+        # enough: the subshell still holds the parent's stdout, so the calling
+        # shell waits for it, and a banner that lives until you click it would
+        # hang `popr install` and, far worse, the hook itself.
         (
             osascript -l JavaScript "$BANNER_JS" "$title" "$line" \
                 "$(opt banner_icon "")" "$slot" "$style" "$CLICK_CMD" \
                 "$(opt banner_seconds 900)" "$(opt font "")" \
-                "$BURST_DNA" "$(opt confetti_size 90)" >/dev/null 2>&1
+                "$BURST_DNA" "$(opt confetti_size 90)"
             rm -rf "$dir"
-        ) &
+        ) </dev/null >/dev/null 2>&1 &
         printf '%s' "$!" >"$dir/pid" 2>/dev/null
         # The native notification is off by default: POPR's banner replaces it.
         is_true "$(opt native false)" || return 0
@@ -417,10 +421,7 @@ pset() { # plist key value  · -replace refuses a key that is not there yet
 
 build_bundle() {
     local src plist
-    if ! src="$(source_bundle)"; then
-        echo "popr: cannot find terminal-notifier.app, so banners will not be branded" >&2
-        return 1
-    fi
+    src="$(source_bundle)" || return 1
     [ -f "$ROOT/assets/POPR.icns" ] || { echo "popr: assets/POPR.icns is missing" >&2; return 1; }
 
     rm -rf "$BUNDLE"
@@ -506,21 +507,28 @@ EOF
         exit 1
     fi
 
-    for t in terminal-notifier jq; do
-        has "$t" && continue
+    # jq is required: it parses the hook payload and edits settings.json.
+    if ! has jq; then
         if has brew; then
-            echo "→ installing $t"
-            brew install "$t"
+            echo "→ installing jq"
+            brew install jq
         else
-            echo "✗ $t is missing and Homebrew is not installed. See https://brew.sh" >&2
+            echo "✗ jq is missing and Homebrew is not installed. See https://brew.sh" >&2
             exit 1
         fi
-    done
+    fi
 
-    if build_bundle; then
-        echo "→ built $BUNDLE, so banners carry POPR's name and icon"
-    else
-        echo "→ falling back to plain terminal-notifier for banners"
+    # terminal-notifier is optional. POPR draws its own banners, so it is only
+    # needed for the native notification path, which is off by default. Install
+    # it when it is easy, never fail for it.
+    if ! has terminal-notifier && has brew; then
+        echo "→ installing terminal-notifier (optional, for macOS notifications)"
+        brew install terminal-notifier >/dev/null 2>&1 || echo "  skipped, POPR does not need it"
+    fi
+
+    # Only needed for the optional native notification path.
+    if has terminal-notifier && build_bundle; then
+        echo "→ built $BUNDLE, for macOS notifications if you turn them on"
     fi
 
     hooks_edit add || exit 1
@@ -537,19 +545,30 @@ EOF
 ✅ POPR installed
 
 Next:
-  1. System Settings › Notifications › POPR
-     Allow notifications: on · Alert style: Alerts (so banners wait for a click)
-  2. Reload your editor window so the new hooks are picked up.
-  3. popr config    to change sounds and behaviour
+  1. Reload your editor window so the new hooks are picked up.
+  2. popr test      to see a banner
+     popr config    to change sounds and behaviour
      popr doctor    to check everything
+
+POPR draws its own banners, so there is no notification permission to grant.
 
 Log: $LOG_FILE
 EOF
 }
 
 uninstall_cmd() {
+    local d pid
     hooks_edit remove || exit 1
     echo "→ POPR hooks removed from $SETTINGS_FILE"
+    for d in "$STATE_DIR"/slot-*; do
+        [ -d "$d" ] || continue
+        pid="$(cat "$d/pid" 2>/dev/null)"
+        [ -n "$pid" ] && kill "$pid" 2>/dev/null
+    done
+    if [ -d "$STATE_DIR" ]; then
+        rm -rf "$STATE_DIR"
+        echo "→ closed any open banners and cleared $STATE_DIR"
+    fi
     if [ -d "$BUNDLE" ]; then
         rm -rf "$BUNDLE"
         echo "→ removed $BUNDLE"
@@ -571,22 +590,35 @@ config_cmd() {
         read -r ans </dev/tty || ans=""
         printf '%s' "${ans:-$d}"
     }
-    local done_s att_s err_s vol spk quiet icon app
-    done_s="$(ask sound_done "Done sound" Glass)"
-    att_s="$(ask sound_attention "Needs input sound" Ping)"
-    err_s="$(ask sound_error "Error sound" Basso)"
+    local done_s att_s err_s vol spk quiet app conf csize words bfont bstyle
+    done_s="$(ask sound_done "Done sound" "")"
+    att_s="$(ask sound_attention "Needs input sound" "")"
+    err_s="$(ask sound_error "Error sound" "")"
     vol="$(ask volume "Volume 0 to 1" 1)"
     spk="$(ask speak "Say the project name" false)"
     quiet="$(ask quiet_when_focused "Quiet when app is in front" false)"
-    icon="$(ask icon "Banner picture (path/app/none)" "")"
     app="$(ask app "Force target app (blank = auto)" "")"
+    conf="$(ask confetti "Confetti burst" true)"
+    csize="$(ask confetti_size "Confetti reach in pixels" 90)"
+    words="$(ask summary_words "Words of status" 7)"
+    bstyle="$(ask banner_style "Banner style (pill/glass)" pill)"
+    bfont="$(ask font "Font family (blank = system)" "")"
 
     jq -n --arg a "$done_s" --arg b "$att_s" --arg c "$err_s" --arg v "$vol" \
-        --arg s "$spk" --arg q "$quiet" --arg i "$icon" --arg p "$app" '
-    {sound_done:$a, sound_attention:$b, sound_error:$c, volume:($v|tonumber? // 1),
-     speak:($s|test("^(1|true|yes|on)$";"i")), quiet_when_focused:($q|test("^(1|true|yes|on)$";"i"))}
-    + (if $i == "" then {} else {icon:$i} end)
+        --arg s "$spk" --arg q "$quiet" --arg p "$app" --arg cf "$conf" \
+        --arg cs "$csize" --arg w "$words" --arg bs "$bstyle" --arg ft "$bfont" '
+    {volume:($v|tonumber? // 1),
+     speak:($s|test("^(1|true|yes|on)$";"i")),
+     quiet_when_focused:($q|test("^(1|true|yes|on)$";"i")),
+     confetti:($cf|test("^(1|true|yes|on)$";"i")),
+     confetti_size:($cs|tonumber? // 90),
+     summary_words:($w|tonumber? // 7),
+     banner_style:$bs}
+    + (if $a == "" then {} else {sound_done:$a} end)
+    + (if $b == "" then {} else {sound_attention:$b} end)
+    + (if $c == "" then {} else {sound_error:$c} end)
     + (if $p == "" then {} else {app:$p} end)
+    + (if $ft == "" then {} else {font:$ft} end)
   ' >"$f"
     echo
     echo "→ written to $f"
@@ -597,22 +629,27 @@ doctor() {
     local t existing
     echo "POPR doctor · v$VERSION"
     printf '  %-20s %s\n' "macOS" "$(sw_vers -productVersion 2>/dev/null || echo unknown)"
-    for t in terminal-notifier jq afplay say lsappinfo; do
+    for t in jq osascript afplay; do
         if has "$t"; then printf '  %-20s ok  %s\n' "$t" "$(command -v "$t")"; else printf '  %-20s MISSING\n' "$t"; fi
+    done
+    for t in terminal-notifier say lsappinfo; do
+        if has "$t"; then printf '  %-20s ok  %s\n' "$t" "$(command -v "$t")"; else printf '  %-20s optional, absent\n' "$t"; fi
     done
     printf '  %-20s %s\n' "script" "$SCRIPT_PATH"
     printf '  %-20s %s\n' "package root" "$ROOT"
     printf '  %-20s %s\n' "host app" "$HOST_APP ($WHERE)"
     printf '  %-20s %s\n' "project" "$LABEL"
     printf '  %-20s %s\n' "click action" "$CLICK_CMD"
-    printf '  %-20s %s\n' "banner picture" "${ICON:-none}"
-    if [ "$BRANDED" = 1 ]; then
-        printf '  %-20s %s\n' "posts as" "POPR · $BUNDLE"
-        bundle_stale && echo "  ⚠ terminal-notifier was upgraded since this bundle was built. Run: popr install"
-    elif [ -n "$NOTIFIER" ]; then
-        printf '  %-20s %s\n' "posts as" "terminal-notifier (unbranded). Run: popr install"
-    else
-        printf '  %-20s %s\n' "posts as" "osascript fallback, no click action"
+    if is_true "$(opt native false)" || ! is_true "$(opt banner true)"; then
+        printf '  %-20s %s\n' "native picture" "${ICON:-none}"
+        if [ "$BRANDED" = 1 ]; then
+            printf '  %-20s %s\n' "native posts as" "POPR · $BUNDLE"
+            bundle_stale && echo "  ⚠ terminal-notifier was upgraded since this bundle was built. Run: popr install"
+        elif [ -n "$NOTIFIER" ]; then
+            printf '  %-20s %s\n' "native posts as" "terminal-notifier (unbranded). Run: popr install"
+        else
+            printf '  %-20s %s\n' "native posts as" "osascript fallback, no click action"
+        fi
     fi
     if [ -f "$CONFIG_FILE" ]; then
         printf '  %-20s %s\n' "config" "$CONFIG_FILE"
@@ -648,14 +685,16 @@ doctor() {
         printf '  %-20s %s\n' "native notif" "also posting to Notification Center"
     fi
     printf '  %-20s %s\n' "log" "$LOG_FILE"
-    has terminal-notifier || echo "  fix: brew install terminal-notifier"
     has jq || echo "  fix: brew install jq"
-    if [ "$BRANDED" = 1 ]; then
-        echo "  No banner? System Settings › Notifications › POPR: allow, style Alerts."
+    if is_true "$(opt banner true)"; then
+        echo "  No banner? Check osascript above, then: popr test"
+        echo "  Banners are POPR's own windows: no notification permission, and"
+        echo "  Focus and Do Not Disturb do not silence them either."
     else
-        echo "  No banner? System Settings › Notifications › terminal-notifier: allow, style Alerts."
+        echo "  Banners are off, so this posts macOS notifications instead."
+        echo "  No banner? System Settings › Notifications › POPR: allow, style Alerts."
+        echo "  Focus modes silence those."
     fi
-    echo "  Focus modes silence it too."
 }
 
 usage() {
@@ -682,7 +721,7 @@ Settings (POPR_<KEY> env > plugin option > $CONFIG_FILE > default):
                                 host app's icon, or none. The logo on the LEFT
                                 is the bundle's icon and cannot be changed here.
   banner              true      draw POPR's own banner instead of a macOS one
-  banner_style        pill      pill, glass or minimal
+  banner_style        pill      pill (ivory) or glass (blurred dark)
   banner_icon         auto      a PNG to use instead of the project's own mark
   banner_seconds      900       backstop before a banner gives up waiting
   native              false     also post a macOS notification
@@ -707,8 +746,7 @@ case "$MODE" in
         notify "✓ $LABEL" "POPR test" "Click the banner to bring $WHERE to the front"
         speak "POPR test for $PROJECT_NAME"
         log "test fired for $LABEL in $WHERE"
-        echo "Test notification sent for $LABEL in $WHERE. Clicking it runs: $CLICK_CMD"
-        has terminal-notifier || echo "terminal-notifier is missing, so the click cannot jump back: brew install terminal-notifier"
+        echo "Banner shown for $LABEL. Clicking it runs: $CLICK_CMD"
         exit 0
         ;;
     clear)

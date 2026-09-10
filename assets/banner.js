@@ -2,6 +2,8 @@
 //
 //   osascript -l JavaScript banner.js <title> <message> <icon> <slot> <style> <click> <maxSeconds> <font> <dna> <burstSize>
 //
+// style is 'pill' (ivory) or 'glass' (a real blur of what is behind it).
+//
 // macOS gives no control over a notification banner. The layout is fixed, the
 // icon comes from the app bundle and cannot be emptied (an empty icns renders a
 // white square, tested on a bundle id it had never seen), and nothing in it will
@@ -124,6 +126,19 @@ function markFor(dna, size) {
     return chips;
 }
 
+function screenUnderPointer() {
+    var mouse = $.NSEvent.mouseLocation;
+    var screens = $.NSScreen.screens;
+    for (var i = 0; i < screens.count; i++) {
+        var s = screens.objectAtIndex(i), f = s.frame;
+        if (mouse.x >= f.origin.x && mouse.x < f.origin.x + f.size.width &&
+            mouse.y >= f.origin.y && mouse.y < f.origin.y + f.size.height) {
+            return s;
+        }
+    }
+    return $.NSScreen.mainScreen;
+}
+
 function shuffled(list, rand) {
     var a = list.slice(), i, j, swap;
     for (i = a.length - 1; i > 0; i--) {
@@ -225,7 +240,7 @@ function run(argv) {
     var message = argv[1] || '';
     var iconPath = argv[2] || '';
     var slot = parseInt(argv[3] || '0', 10);
-    var style = argv[4] || 'pill';
+    var style = argv[4] || 'pill';   // pill (ivory) or glass (blurred dark)
     var clickCmd = argv[5] || '';
     var maxSeconds = parseFloat(argv[6] || '600');
     var family = argv[7] || '';   // e.g. "Styrene A" when the machine has it
@@ -260,7 +275,10 @@ function run(argv) {
     var line = message ? title + '   ' + message : title;
     var field = label(line, 9.6, textColour, textW, family);   // 20% down from 12
 
-    var vf = $.NSScreen.mainScreen.visibleFrame;
+    // The screen the pointer is on, not "main". On a two screen desk the main
+    // screen is wherever the menu bar lives, which is regularly not the one you
+    // are looking at, and a banner you never see is worse than no banner.
+    var vf = screenUnderPointer().visibleFrame;
     var x = vf.origin.x + vf.size.width - W - 20;
     var y = vf.origin.y + vf.size.height - H - 14 - slot * PITCH;
 

@@ -133,7 +133,7 @@ popr config     # interactive, writes ~/.config/popr/config.json
 | Status length | `POPR_SUMMARY_WORDS` | `7` | words of status on the banner |
 | Confetti | `POPR_CONFETTI` | `true` | the burst out of the banner's mark |
 | Confetti reach | `POPR_CONFETTI_SIZE` | `90` | pixels |
-| Banner style | `POPR_BANNER_STYLE` | `pill` | `pill`, `glass` or `minimal` |
+| Banner style | `POPR_BANNER_STYLE` | `pill` | `pill` (ivory) or `glass` (blurred dark) |
 | Banner mark | `POPR_BANNER_ICON` | the project's own | a PNG to use instead |
 | Font | `POPR_FONT` | system | a family name, e.g. `Styrene A` |
 | Draw our own banners | `POPR_BANNER` | `true` | `false` falls back to macOS notifications |
@@ -210,8 +210,11 @@ exits 0, so a hook cannot slow down or break your turn.
 
 ## Requirements
 
-macOS 13 or later, [Claude Code](https://claude.com/claude-code), plus `jq` and
-`terminal-notifier`, which every install path fetches for you through Homebrew.
+macOS 13 or later, [Claude Code](https://claude.com/claude-code), and `jq`, which
+every install path fetches for you through Homebrew.
+
+`terminal-notifier` is **optional**. POPR draws its own banners, so it is only
+needed if you turn on `native` to also post macOS notifications.
 
 ## Limits
 
@@ -220,6 +223,7 @@ Honest ones, so nobody files them twice:
 - **No Notification Center history.** POPR's banners are its own windows, so nothing lands in Notification Center and nothing survives being dismissed. `POPR_NATIVE=true` posts a macOS notification alongside if you want the history back.
 - **Focus and Do Not Disturb are not consulted.** Same reason: POPR is not going through the notification system, so the system's silencing rules do not apply to it.
 - **The status is seven words**, taken from the first sentence of Claude's reply. It is a status, not a summary Claude wrote for the purpose.
+- **The banner follows the pointer.** On several screens it appears on the one your mouse is on, not whichever macOS calls main.
 - **The click focuses a window, not a tab.** With several sessions in one folder, the title tells you the project and the preview tells you the conversation.
 - **`.code-workspace` spanning several folders** may open the project folder in a separate window.
 - **macOS only**, by design.

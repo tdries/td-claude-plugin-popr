@@ -152,7 +152,30 @@ out="$(run stop '{"session_id":"s8"}')"
 contains "banner · drawn by POPR, not macOS" "$out" "style=pill"
 contains "banner · one line of status, prefixed by where" "$out" "message=Ready for your next prompt"
 
-# 12 · version matches the packaged manifests
+# 11b · POPR must return immediately, with the banner left running detached.
+#       This is the hook contract: a banner that waits for a click would
+#       otherwise hold the calling shell open for as long as it is on screen,
+#       and in a hook that means Claude waiting. Redirecting the command inside
+#       the subshell is not enough; the subshell itself must give up the stdio
+#       it inherited. Timed end to end rather than asserted about the source.
+start="$(date +%s)"
+POPR_DRY_RUN="" POPR_CONFETTI=false POPR_BANNER_SECONDS=1 \
+    CLAUDE_PROJECT_DIR="$PROJ" "$POPR" test >/dev/null 2>&1
+elapsed=$(($(date +%s) - start))
+if [ "$elapsed" -le 3 ]; then ok "returns at once, banner runs detached (${elapsed}s)"; else
+    bad "returns at once, banner runs detached" "took ${elapsed}s; the subshell is holding stdio"
+fi
+
+# 12 · the generated marks and bursts obey their rules for every project name
+if command -v osascript >/dev/null 2>&1; then
+    res="$(osascript -l JavaScript "$ROOT/tests/banner-rules.js" "$ROOT/assets/banner.js" 2>&1)"
+    case "$res" in
+        ok*) ok "banner rules · $res" ;;
+        *) bad "banner rules" "$res" ;;
+    esac
+fi
+
+# 13 · version matches the packaged manifests
 v="$("$POPR" version)"
 for m in "$ROOT/.claude-plugin/plugin.json" "$ROOT/packaging/npm/package.json"; do
     [ -f "$m" ] || continue

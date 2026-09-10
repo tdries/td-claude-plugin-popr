@@ -19,6 +19,7 @@ that installs cleanly without an Apple Developer ID.
 | macOS takes a notification's icon and name from the posting bundle, with no API to override either | POPR posts through its **own** restamped copy of terminal-notifier's bundle, built locally at install time. See §4.4. |
 | A hook must never break a turn | Every path in `bin/popr` exits 0. All slow work runs in a detached subshell. |
 | macOS only | `uname` guard in the installer and the formula. |
+| A hook must return at once | The banner outlives the process that launched it, so it is fully detached, stdio included. Redirecting the command inside the subshell is not enough: the subshell still holds the parent's stdout and the caller waits on it. Timed by a test. |
 
 ## 2 · What ships
 
@@ -282,7 +283,7 @@ degrades rather than failing.
 | `confetti` | `true` | the burst out of the banner's mark |
 | `confetti_size` | `90` | how far it reaches, in pixels |
 | `banner` | `true` | draw our own banner instead of a macOS notification |
-| `banner_style` | `pill` | `pill`, `glass` or `minimal` |
+| `banner_style` | `pill` | `pill` (ivory) or `glass` (blurred dark) |
 | `banner_icon` | the project's own | a PNG to use instead of the generated mark |
 | `banner_seconds` | `900` | backstop before a banner stops waiting for a click |
 | `native` | `false` | also post a macOS notification, for the history |
