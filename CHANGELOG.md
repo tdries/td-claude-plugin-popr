@@ -3,6 +3,20 @@
 All notable changes to POPR. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [SemVer](https://semver.org/).
 
+## [1.5.0] - 2026-09-10
+
+Acting on an honest reading of what was weakest.
+
+### Fixed
+- **An open banner cost about 2% of a core doing nothing.** It woke twenty times a second to ask whether it had been clicked yet. The click handler now stops the run loop itself, so the banner idles in five second blocks and the wake is only a backstop for the deadline. Three open banners went from 6.4% CPU to 0.0%, and dismissal is still immediate.
+
+### Added
+- **Tests for the hook wiring**, which rewrites `~/.claude/settings.json` and was the riskiest thing POPR does with no coverage at all — every other test runs under `POPR_DRY_RUN`, which skips exactly that path. Fourteen assertions against a throwaway Claude directory: registers exactly four hooks, is idempotent, keeps unrelated settings and other people's hooks, strips leftover butlr ones, backs the file up first, works from no file at all, refuses to wreck an unparseable one, and refuses to stack on a plugin install. Plus concurrent slot claiming.
+- `POPR_CLAUDE_DIR` so that path can be tested against a copy, and `popr install --quiet` for scripted installs, which is also what lets those tests run without throwing windows on screen.
+
+### Changed
+- **The branded app bundle is built only when `native` is turned on.** It exists solely to give macOS notifications POPR's name and icon, and those are off by default, so every install was doing work nobody had asked for.
+
 ## [1.4.0] - 2026-09-10
 
 Hardening pass.

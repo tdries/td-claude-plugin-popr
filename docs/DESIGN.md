@@ -240,7 +240,24 @@ Two rules keep the marks comparable rather than merely different:
 The burst comes out of the mark, which is only possible because we draw the
 banner. macOS never reveals where it puts its own, so there was nothing to aim at.
 
-### 4.8 Sound
+### 4.8 What a banner costs
+
+Each open banner is an `osascript` process holding an AppKit window: about
+**34 MB** of real memory (`phys_footprint`; RSS reads ~55 MB because it counts
+shared framework pages once per process) and, since the run loop became event
+driven, **no measurable CPU**.
+
+A single long-lived helper owning every banner would cut the memory to 34 MB
+regardless of how many are open. It is deliberately not built. Banners exist
+between a turn ending and you clicking it, there is at most one per session, so
+the common case is one or two; a helper would use the same memory there while
+adding a lifecycle, an IPC path and a new way for notifications to stop arriving
+entirely. Trading "always works" for "usually works, and uses less in a case
+that rarely happens" is a bad deal for a tool whose whole value is reliability.
+
+Worth revisiting if anyone routinely leaves five or more banners unclicked.
+
+### 4.9 Sound
 
 Three swells sharing one timbre, synthesized in `assets/make_sound.py` from the
 standard library: G major and settled when a turn lands, rising and unresolved

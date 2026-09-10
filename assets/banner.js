@@ -18,6 +18,7 @@
 //     A non-activating NSPanel takes the click and leaves your focus alone.
 ObjC.import('AppKit');
 ObjC.import('Foundation');
+ObjC.import('CoreFoundation');
 
 var PITCH = 40;      // vertical distance between stacked banners
 
@@ -172,7 +173,12 @@ ObjC.registerSubclass({
     methods: {
         'mouseDown:': {
             types: ['void', ['id']],
-            implementation: function () { state.clicked = true; },
+            implementation: function () {
+                state.clicked = true;
+                // Break the run loop immediately rather than waiting for the
+                // next poll, so dismissal is instant however lazily we tick.
+                $.CFRunLoopStop($.CFRunLoopGetCurrent);
+            },
         },
     },
 });
@@ -402,10 +408,15 @@ function run(argv) {
 
     // Stay put until clicked. maxSeconds is only a backstop so a forgotten
     // banner cannot leave a process running for the rest of the session.
-    var waited = 0;
+    //
+    // Waking twenty times a second to ask "clicked yet?" cost about 2% of a core
+    // per open banner, which is absurd for a thing that is doing nothing. The
+    // click handler stops the run loop itself, so this can idle in long blocks:
+    // the wake is a backstop for the deadline, not the click.
+    var waited = 0, CHUNK = 5;
     while (!state.clicked && waited < maxSeconds) {
-        tick(0.05);
-        waited += 0.05;
+        tick(Math.min(CHUNK, maxSeconds - waited));
+        waited += CHUNK;
     }
 
     for (i = n; i >= 0; i--) { win.setAlphaValue(i / n); tick(0.008); }

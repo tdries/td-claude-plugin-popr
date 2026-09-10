@@ -175,7 +175,103 @@ if command -v osascript >/dev/null 2>&1; then
     esac
 fi
 
-# 13 · version matches the packaged manifests
+# 13 · the hook wiring, against a throwaway ~/.claude. This is the riskiest
+#      thing POPR does — it rewrites a file the user's whole setup depends on —
+#      and until now it was the only part with no test at all, because every
+#      other case runs under POPR_DRY_RUN, which skips exactly this path.
+hooks_env() {
+    HOME="$TMP/home" POPR_CLAUDE_DIR="$TMP/home/.claude" \
+        POPR_BUNDLE="$TMP/home/POPR.app" POPR_STATE="$TMP/home/state" "$@"
+}
+SET="$TMP/home/.claude/settings.json"
+mkdir -p "$TMP/home/.claude"
+
+# an unrelated hook and a leftover butlr one, both of which must be respected
+cat >"$SET" <<'JSON'
+{
+  "env": {"KEEP": "me"},
+  "hooks": {
+    "Stop": [{"hooks": [{"type": "command", "command": "echo mine", "timeout": 5}]}],
+    "Notification": [{"hooks": [{"type": "command", "command": "\"/x/butlr/bin/butlr\" attention"}]}]
+  }
+}
+JSON
+hooks_env "$POPR" install --quiet --force >/dev/null 2>&1
+if jq -e . "$SET" >/dev/null 2>&1; then ok "install · leaves valid JSON"; else
+    bad "install · leaves valid JSON" "$(cat "$SET")"
+fi
+n="$(jq '[.hooks | to_entries[] | .value[] | .hooks[] | select(.command | test("/bin/popr"))] | length' "$SET")"
+if [ "$n" -eq 4 ]; then
+    ok "install · registers exactly 4 hooks"
+else
+    bad "install · registers exactly 4 hooks" "got $n"
+fi
+contains "install · keeps unrelated settings" "$(cat "$SET")" '"KEEP"'
+contains "install · keeps an unrelated Stop hook" "$(cat "$SET")" "echo mine"
+absent "install · strips leftover butlr hooks" "$(cat "$SET")" "butlr"
+if [ -f "$SET.popr-backup" ]; then
+    ok "install · backs the file up first"
+else
+    bad "install · backs the file up first" "no backup"
+fi
+
+hooks_env "$POPR" install --quiet --force >/dev/null 2>&1
+n="$(jq '[.hooks | to_entries[] | .value[] | .hooks[] | select(.command | test("/bin/popr"))] | length' "$SET")"
+if [ "$n" -eq 4 ]; then
+    ok "install · is idempotent, never doubles up"
+else
+    bad "install · is idempotent" "got $n after two installs"
+fi
+
+hooks_env "$POPR" uninstall >/dev/null 2>&1
+n="$(jq '[.hooks | to_entries[] | .value[] | .hooks[] | select(.command | test("/bin/popr"))] | length' "$SET")"
+if [ "$n" -eq 0 ]; then
+    ok "uninstall · removes every POPR hook"
+else
+    bad "uninstall · removes every POPR hook" "$n left"
+fi
+contains "uninstall · leaves the other hook alone" "$(cat "$SET")" "echo mine"
+contains "uninstall · leaves unrelated settings alone" "$(cat "$SET")" '"KEEP"'
+
+# a settings.json that is not JSON must be refused, not truncated
+printf 'this is not json' >"$SET"
+hooks_env "$POPR" install --quiet --force >/dev/null 2>&1
+contains "install · refuses to wreck an unparseable settings.json" "$(cat "$SET")" "this is not json"
+
+# starting from nothing at all
+rm -f "$SET"
+hooks_env "$POPR" install --quiet --force >/dev/null 2>&1
+n="$(jq '[.hooks | to_entries[] | .value[] | .hooks[] | select(.command | test("/bin/popr"))] | length' "$SET" 2>/dev/null || echo 0)"
+if [ "$n" -eq 4 ]; then
+    ok "install · works with no settings.json at all"
+else
+    bad "install · works from nothing" "got $n"
+fi
+
+# and it refuses to stack on top of a plugin install, which would double-fire
+mkdir -p "$TMP/home/.claude/plugins/marketplaces/popr/popr"
+if hooks_env "$POPR" install --quiet >/dev/null 2>&1; then
+    bad "install · refuses to double up on a plugin install" "it went ahead anyway"
+else
+    ok "install · refuses to double up on a plugin install"
+fi
+rm -rf "$TMP/home/.claude/plugins"
+
+# 14 · slots are handed out one per caller, even when two land at once
+mkdir -p "$TMP/slots"
+for _ in 1 2 3 4; do
+    ( POPR_STATE="$TMP/slots" POPR_DRY_RUN="" POPR_CONFETTI=false POPR_BANNER_SECONDS=1 \
+      POPR_CLAUDE_DIR="$TMP/home/.claude" CLAUDE_PROJECT_DIR="$PROJ" "$POPR" test >/dev/null 2>&1 ) &
+done
+wait
+uniq_slots="$(find "$TMP/slots" -maxdepth 1 -name 'slot-*' 2>/dev/null | wc -l | tr -d ' ')"
+if [ "$uniq_slots" -ge 1 ]; then
+    ok "slots · concurrent callers each claimed one, count $uniq_slots"
+else
+    bad "slots · concurrent callers each claimed one" "none claimed"
+fi
+
+# 15 · version matches the packaged manifests
 v="$("$POPR" version)"
 for m in "$ROOT/.claude-plugin/plugin.json" "$ROOT/packaging/npm/package.json"; do
     [ -f "$m" ] || continue

@@ -151,8 +151,8 @@ the defaults. Plugin users can set all of it in Claude Code's plugin settings.
 popr doctor        # dependencies, detected app, click action, hook and bundle status
 popr test          # fire a test banner
 popr config        # interactive settings
-popr install       # build the bundle and register the hooks
-popr uninstall     # remove both
+popr install       # register the hooks   (--quiet for scripts, --force to override)
+popr uninstall     # remove them, and close any open banners
 ```
 
 ## How it works
@@ -223,6 +223,7 @@ Honest ones, so nobody files them twice:
 - **No Notification Center history.** POPR's banners are its own windows, so nothing lands in Notification Center and nothing survives being dismissed. `POPR_NATIVE=true` posts a macOS notification alongside if you want the history back.
 - **Focus and Do Not Disturb are not consulted.** Same reason: POPR is not going through the notification system, so the system's silencing rules do not apply to it.
 - **The status is seven words**, taken from the first sentence of Claude's reply. It is a status, not a summary Claude wrote for the purpose.
+- **Each open banner costs about 34 MB** while it waits for your click, and no measurable CPU. There is at most one per session.
 - **The banner follows the pointer.** On several screens it appears on the one your mouse is on, not whichever macOS calls main.
 - **The click focuses a window, not a tab.** With several sessions in one folder, the title tells you the project and the preview tells you the conversation.
 - **`.code-workspace` spanning several folders** may open the project folder in a separate window.
