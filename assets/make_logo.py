@@ -61,12 +61,32 @@ def rgba(hex_colour):
     return (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16), 255)
 
 
-def render(size):
-    """Rasterise GRID into a size*size RGBA buffer on a transparent ground."""
+GROUND = "#F0EEE6"  # Anthropic ivory, the app icon's body
+CORNER = 0.2237     # macOS rounds an app icon at roughly this fraction of its side
+
+
+def render(size, ground=None):
+    """Rasterise GRID into a size*size RGBA buffer.
+
+    Transparent by default, which is what the notification's contentImage wants:
+    it sits on the banner's own dark background. Pass ground to fill a rounded
+    rectangle behind it instead, which is what an app icon needs. Bare confetti
+    on transparent has no mass and dissolves into a smudge at 16 and 32 px, where
+    an app icon spends most of its life.
+    """
     if size % CELLS:
         raise ValueError(f"{size} is not a multiple of {CELLS}, pixels would blur")
     scale = size // CELLS
     px = [[(0, 0, 0, 0)] * size for _ in range(size)]
+    if ground:
+        body, r = rgba(ground), size * CORNER
+        for y in range(size):
+            for x in range(size):
+                # inside the rectangle, except beyond the arc of a rounded corner
+                cx = r - 0.5 - x if x < r else (x - (size - r) + 0.5 if x > size - r else 0)
+                cy = r - 0.5 - y if y < r else (y - (size - r) + 0.5 if y > size - r else 0)
+                if cx <= 0 or cy <= 0 or cx * cx + cy * cy <= r * r:
+                    px[y][x] = body
     for gx, gy, gs, key in GRID:
         colour = rgba(PALETTE[key])
         for y in range(gy * scale, (gy + gs) * scale):
@@ -157,7 +177,7 @@ def write_icns(path):
         iconset = pathlib.Path(tmp) / "popr.iconset"
         iconset.mkdir()
         for src, name in ICONSET:
-            shutil.copy(HERE / f"popr-{src}.png", iconset / f"icon_{name}.png")
+            write_png(iconset / f"icon_{name}.png", render(src, ground=GROUND))
         subprocess.run(["iconutil", "-c", "icns", str(iconset), "-o", str(path)], check=True)
     return True
 
@@ -170,6 +190,8 @@ def main(want_icns):
         out = HERE / f"popr-{size}.png"
         write_png(out, render(size))
         print(f"assets/{out.name}  {out.stat().st_size} bytes")
+    write_png(HERE / "icon-512.png", render(512, ground=GROUND))
+    print("assets/icon-512.png  (app icon, on its ivory body)")
     if want_icns and write_icns(HERE / "POPR.icns"):
         print(f"assets/POPR.icns  {(HERE / 'POPR.icns').stat().st_size} bytes")
 
@@ -189,9 +211,15 @@ def demo():
     # every size we ship must divide the grid cleanly
     for s in SIZES:
         assert s % CELLS == 0, s
-    # every iconset slot must have a PNG behind it
+    # every iconset slot must have a PNG size behind it
     for src, _ in ICONSET:
         assert src in SIZES, src
+    # the app icon variant fills its corners with ivory but keeps them rounded
+    g = render(64, ground=GROUND)
+    assert g[32][32] == rgba(GROUND) or g[32][32] == rgba(PALETTE["o"]), g[32][32]
+    assert g[32][1] == rgba(GROUND), g[32][1]          # mid edge is inside the body
+    assert g[0][0] == (0, 0, 0, 0), g[0][0]            # the very corner is cut away
+    assert render(64)[32][1] == (0, 0, 0, 0)           # default stays transparent
     # the animation emits one chip and one pair of animations per grid entry
     with tempfile.TemporaryDirectory() as tmp:
         out = pathlib.Path(tmp) / "a.svg"

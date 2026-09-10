@@ -49,6 +49,9 @@ and field proven shape (`"source": "./"`).
 │   ├── make_logo.py              pixel grid -> svg + animated svg + png + icns
 │   ├── logo.svg                  generated
 │   ├── logo-animated.svg         generated, SMIL burst, README hero
+│   ├── icon-512.png              generated, the app icon on its ivory body
+│   ├── banners.svg               hand authored, README illustration
+│   ├── social.svg                hand authored, GitHub social preview
 │   ├── POPR.icns                 generated, the bundle's icon
 │   └── popr-{16,32,64,128,256,512}.png   generated, 256 is the banner icon
 ├── docs/
@@ -167,10 +170,16 @@ Consequences:
 
 - The banner shows POPR and the confetti icon.
 - macOS gives POPR its own row in System Settings › Notifications.
-- `NSUserNotificationAlertStyle = alert` in the Info.plist asks macOS to default
+- `NSUserNotificationAlertStyle = alert` in the Info.plist makes macOS default
   the app to persistent Alerts rather than transient Banners, which is what
-  "stays until you click it" means. It is a request, not a guarantee; the user
-  setting is authoritative and the README says how to change it.
+  "stays until you click it" means. **Verified on macOS 26.5**: POPR's row shows
+  Meldingsstijl = Blijvend without the user touching anything. The user setting
+  stays authoritative and can override it.
+- The `.icns` is drawn on an ivory rounded body rather than transparent. Bare
+  confetti has no mass and dissolves into a grey smudge at the 16 and 32 px
+  sizes where an app icon actually lives, in the Settings list and elsewhere.
+  The banner's `contentImage` keeps the transparent PNG, because it sits on the
+  banner's own dark background.
 - A terminal-notifier upgrade leaves the copy behind, so the bundle records
   `POPRBuiltFrom` and `popr doctor` flags a stale one.
 - If the bundle cannot be built, POPR falls back to plain terminal-notifier and
@@ -185,7 +194,7 @@ Asked and answered, so nobody relitigates it:
 | Animated icon in the banner | No. The banner renders one static image. A custom animated view needs a Notification Content Extension, which is an Xcode app target, only styles the *expanded* notification, and reintroduces signing. The logo is animated in the README instead. |
 | Control the banner layout | No. Five content slots (icon, name, title, subtitle, body) plus an optional right hand image, an action button and a reply field. Arrangement, type, colour, corner radius, position and the slide-in are the system's. |
 | Force "stays until clicked" | Partly. It is the alert style, a per app user setting. The Info.plist key asks for the right default; the user can always override it. |
-| Several notifications stacked | Yes, already. One `-group` per session id, so N live sessions give N banners. macOS may still collapse them into one stack depending on that app's "Group notifications" setting. |
+| Several notifications stacked | Yes, already. One `-group` per session id, so N live sessions give N banners. macOS collapses them into one stack while that app's "Group notifications" is set to Automatically; setting it to Off lists them individually. That is a user setting with no Info.plist equivalent. |
 
 ## 5 · Configuration
 
@@ -287,8 +296,9 @@ Deliberately not built, and not to be added without a new design:
 
 These block the last mile of distribution and are not things POPR can do for itself:
 
-1. Create `tdries/homebrew-tap`.
-2. Claim an npm account and set `NPM_TOKEN` in repo secrets.
-3. Set `TAP_TOKEN` (a PAT with repo scope on the tap) in repo secrets.
-4. A real screenshot of a POPR banner would make the README hero far stronger than the logo PNG that ships in its place. Needs a human to trigger and capture one.
+1. ~~Create `tdries/homebrew-tap`.~~ Done.
+2. ~~Set a tap credential.~~ Done, as a write deploy key scoped to the tap alone rather than a personal access token, stored as `TAP_DEPLOY_KEY`.
+3. Claim an npm account and set `NPM_TOKEN` in repo secrets. Needs a browser login, so it cannot be automated.
+4. Upload `assets/social-preview.png` under Settings › General › Social preview. GitHub exposes no API for this.
+5. A real screenshot of a POPR banner would make the README hero far stronger than the logo PNG that ships in its place. Needs a human to trigger and capture one.
 5. Decide whether to rename the repo to `tdries/popr`, which shortens the marketplace command from `tdries/td-claude-plugin-popr` to `tdries/popr`.

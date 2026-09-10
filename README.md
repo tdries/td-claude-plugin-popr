@@ -108,9 +108,12 @@ gives you an **Open** button. Once, ever.
 
 ### Then, once
 
-1. **System Settings › Notifications › POPR** → Allow notifications **on**, style **Alerts**.
-   Alerts is what makes a banner wait for your click instead of vanishing after a few seconds.
-   Check no Focus mode is silencing it.
+1. **System Settings › Notifications › POPR** → Allow notifications **on**.
+   The style is already set to **Alerts** for you, which is what makes a banner wait
+   for your click instead of vanishing after a few seconds. If you want several
+   sessions listed one under the other rather than collapsed into a stack, set
+   **Group notifications** to **Off** while you are there. Check no Focus mode is
+   silencing it.
 2. Reload your editor window (`Developer: Reload Window`), or `/reload-plugins` in a session.
 3. `popr doctor`, then `popr test` or `/popr:test`.
 
@@ -187,8 +190,8 @@ macOS 13 or later, [Claude Code](https://claude.com/claude-code), plus `jq` and
 Honest ones, so nobody files them twice:
 
 - **The banner cannot be animated, and its layout is not yours.** macOS draws it. You fill five slots: icon, name, title, subtitle, body, plus one optional static image. A custom drawn banner needs a Notification Content Extension, which is an Xcode app target and only affects the *expanded* notification anyway.
-- **"Stays until clicked" is a user setting.** POPR asks macOS to default to Alerts; System Settings always wins.
-- **Stacking is macOS's call.** One banner per session is guaranteed. Whether several collapse into one stack depends on POPR's "Group notifications" setting.
+- **"Stays until clicked" comes set up.** POPR's bundle declares the persistent Alerts style, so macOS defaults to it. You can still override it in System Settings, which always wins.
+- **Stacking is partly macOS's call.** One banner per session is guaranteed. Whether several are listed separately or collapsed into one stack is POPR's "Group notifications" setting: set it to **Off** for a list. There is no way to declare that from the app.
 - **The click focuses a window, not a tab.** With several sessions in one folder, the title tells you the project and the preview tells you the conversation.
 - **`.code-workspace` spanning several folders** may open the project folder in a separate window.
 - **macOS only**, by design.
