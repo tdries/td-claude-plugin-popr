@@ -256,13 +256,18 @@ Log: `~/Library/Logs/popr.log`
 ## Develop
 
 ```bash
-tests/test.sh                                                   # 25 assertions, posts nothing
+tests/test.sh
 shellcheck bin/popr install.sh tests/test.sh "packaging/Install POPR.command"
-python3 assets/make_logo.py --icns --gif                        # regenerate every logo form
+node --check assets/banner.js
+python3 assets/make_logo.py --icns     # the mark, at every size, plus the .icns
+python3 assets/make_sound.py           # the three sounds
 ```
 
-Tests run under `POPR_DRY_RUN=1`, which prints what would be posted instead of
-posting it. See [CONTRIBUTING.md](CONTRIBUTING.md).
+Most of the suite runs under `POPR_DRY_RUN=1`, which prints what would be shown
+instead of showing it. Some of it deliberately does not: the hook wiring is
+exercised against a throwaway Claude directory, the detach is timed end to end,
+and the fallback is proved with a banner rigged to fail. Those are the paths
+where a mock would have tested nothing. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 [docs/DESIGN.md](docs/DESIGN.md) is the reasoning: why there is no `.app` to
 download, what macOS refuses to allow, and what is deliberately out of scope.
