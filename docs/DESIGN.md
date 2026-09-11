@@ -53,6 +53,8 @@ and field proven shape (`"source": "./"`).
 │   ├── icon-512.png              generated, the app icon on its ivory body
 │   ├── banners.svg               hand authored, README illustration
 │   ├── social.svg                hand authored, GitHub social preview
+│   ├── make_explode_gif.py       the shareable exploding-logo GIF, promo only
+│   ├── logo-explode.gif          generated
 │   ├── POPR.icns                 generated, the bundle's icon
 │   └── popr-{16,32,64,128,256,512}.png   generated, 256 is the banner icon
 ├── docs/

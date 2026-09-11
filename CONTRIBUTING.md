@@ -31,7 +31,7 @@ rsvg-convert -w 1280 -h 640 -b '#F0EEE6' assets/social.svg -o assets/social-prev
 ```
 
 `librsvg` (`brew install librsvg`) and Pillow (`pip install pillow`) are dev-time
-dependencies for those two lines only. Both outputs are committed, so users never
+dependencies for those lines only. Both outputs are committed, so users never
 regenerate them and neither is ever needed at runtime.
 
 CI runs exactly these on a macOS runner.
@@ -67,6 +67,7 @@ not depend on the developer's own machine.
 | `bin/popr` | the whole engine |
 | `assets/make_logo.py` | the logo, as a pixel grid; the SVGs, PNGs and `.icns` beside it are all generated from it |
 | `assets/social.svg` | the GitHub social preview card, hand authored |
+| `assets/make_explode_gif.py` | the shareable exploding-logo GIF; promo only, POPR never uses it |
 | `.claude-plugin/` | plugin manifest and marketplace entry |
 | `packaging/` | Homebrew formula, npm shim, double click installer |
 | `docs/DESIGN.md` | why it is built this way, including what macOS refuses to allow |

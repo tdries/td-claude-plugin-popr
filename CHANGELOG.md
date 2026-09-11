@@ -3,6 +3,11 @@
 All notable changes to POPR. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- `assets/logo-explode.gif`: the mark blowing apart, as a shareable animated GIF. Promotional only — POPR never loads it; the real burst is drawn live and seeded per project. Built from the same grid and palette as the logo so the two cannot drift apart.
+
 ## [1.7.1] - 2026-09-11
 
 ### Added
