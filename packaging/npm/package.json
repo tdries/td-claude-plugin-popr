@@ -1,6 +1,6 @@
 {
   "name": "popr-cli",
-  "version": "1.6.1",
+  "version": "1.7.0",
   "description": "Clickable macOS banners for Claude Code: a sound, a one line banner, and a confetti burst when a session finishes",
   "bin": {
     "popr": "bin/popr.js"

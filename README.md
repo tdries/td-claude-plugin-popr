@@ -41,6 +41,7 @@ clicking through to its own window.
 | **Error** | The turn stopped on an API error, with the error type |
 | **One click back** | Reopens the exact editor window that session belongs to |
 | **Self cleaning** | A session's banner vanishes the moment you prompt it again |
+| **Quiet when watched** | A finished turn says nothing while you are already looking at that app |
 | **Confetti DNA** | Every project gets its own mark and its own burst, from its name |
 | **Its own sounds** | Three low swells sharing one timbre, not a system chime |
 | **Reads aloud** | Announced to VoiceOver, so the banner is not worse than the notification it replaced |
@@ -129,7 +130,7 @@ popr config     # interactive, writes ~/.config/popr/config.json
 | Error sound | `POPR_SOUND_ERROR` | POPR's hum | |
 | Volume | `POPR_VOLUME` | `1` | 0 to 1 |
 | Say the project name | `POPR_SPEAK` | `false` | useful when you run many sessions |
-| Quiet when the editor is in front | `POPR_QUIET_WHEN_FOCUSED` | `false` | |
+| Quiet while you are looking at it | `POPR_QUIET_WHEN_FOCUSED` | `true` | a finished turn only; never a prompt waiting on you |
 | Force the target app | `POPR_APP` | autodetect | e.g. `Cursor` |
 | Status length | `POPR_SUMMARY_WORDS` | `7` | words of status on the banner |
 | Confetti | `POPR_CONFETTI` | `true` | the burst out of the banner's mark |
@@ -176,6 +177,16 @@ that folder open. For anything else it activates the app.
 **Never in your way.** The banner outlives the process that launched it, so it is
 launched fully detached, stdio included, and every code path exits 0. A hook
 cannot be slowed down or broken by POPR. Measured at about 0.05s.
+
+**Quiet about what you can already see.** A finished turn stays silent while its
+app is in front, because a banner for something on your screen is noise.
+
+That never applies to a prompt waiting on you or to an error. The check is app
+level, not window level — macOS will not give up window titles without Screen
+Recording permission, which is far too much to ask of a notifier — so it cannot
+tell three VS Code windows apart. Guessing wrong in the quiet direction is only
+acceptable when nothing is waiting on you. `POPR_QUIET_WHEN_FOCUSED=false` turns
+it off.
 
 **The status always survives.** On one fixed line a long monorepo name would
 push the status off the end, so the two are budgeted: the status keeps the width

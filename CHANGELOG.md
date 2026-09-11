@@ -3,6 +3,13 @@
 All notable changes to POPR. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [SemVer](https://semver.org/).
 
+## [1.7.0] - 2026-09-11
+
+### Changed
+- **A finished turn now stays quiet while its app is in front**, because a banner for something already on your screen is noise. `quiet_when_focused` defaults to on.
+
+  It deliberately applies to finished turns only. A prompt waiting on you and an error are never suppressed: those are the ones where missing it costs you something. The check is app level rather than window level, because macOS will not reveal window titles without Screen Recording permission — far too invasive for a notifier — so it cannot tell three VS Code windows apart and would otherwise silence sessions you are not looking at. Guessing wrong in the quiet direction is only acceptable when nothing is waiting on you.
+
 ## [1.6.1] - 2026-09-11
 
 ### Fixed

@@ -271,6 +271,17 @@ else
     bad "slots · concurrent callers each claimed one" "none claimed"
 fi
 
+# 14b · a finished turn stays quiet while you are looking at the app, but a
+#       prompt waiting on you never does. The check is app-level and cannot tell
+#       two windows of the same editor apart, so suppressing anything that is
+#       actually waiting on the user would be the wrong way to be wrong.
+out="$(POPR_QUIET_WHEN_FOCUSED=true POPR_APP="Definitely Not Frontmost" run stop '{"session_id":"q1"}')"
+contains "quiet · still fires when the app is not in front" "$out" "NOTIFY"
+for m in attention error; do
+    out="$(POPR_QUIET_WHEN_FOCUSED=true run "$m" '{"session_id":"q2","message":"x","error_type":"y"}')"
+    contains "quiet · never suppresses $m, something is waiting on you" "$out" "NOTIFY"
+done
+
 # 15 · a project directory is attacker-adjacent data: it can hold spaces,
 #      semicolons, quotes and command substitutions, and it ends up inside a
 #      shell command that the click runs. It must arrive as one literal word.

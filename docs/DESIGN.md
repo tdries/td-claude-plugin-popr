@@ -306,7 +306,7 @@ degrades rather than failing.
 | `sound_error` | `Basso` | as above |
 | `volume` | `1` | 0 to 1 |
 | `speak` | `false` | also say the project name aloud |
-| `quiet_when_focused` | `false` | skip the alert when the target app is already frontmost |
+| `quiet_when_focused` | `true` | stay quiet about a finished turn while its app is frontmost. Never applies to `attention` or `error` |
 | `app` | autodetect | force the target app, e.g. `Cursor` |
 | `icon` | bundled logo | path to a PNG, `app` for the host app icon, `none` to hide |
 | `confetti` | `true` | the burst out of the banner's mark |

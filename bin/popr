@@ -19,7 +19,7 @@
 # See `popr help` for the keys.
 
 set -u
-VERSION="1.6.1"
+VERSION="1.7.0"
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:${PATH:-}"
 
 MODE="${1:-stop}"
@@ -752,7 +752,8 @@ Settings (POPR_<KEY> env > plugin option > $CONFIG_FILE > default):
   sound_error         bundled
   volume              1         0 to 1
   speak               false     also say the project name
-  quiet_when_focused  false     skip when the target app is already in front
+  quiet_when_focused  true      stay quiet about a finished turn while its app
+                                is in front. Never applies to "needs you" or errors
   app                 auto      force the target app, e.g. Cursor
   icon                none      picture on the RIGHT: a PNG path, "app" for the
                                 host app's icon, or none. The logo on the LEFT
@@ -796,7 +797,16 @@ case "$MODE" in
 esac
 
 log "hook fired: $MODE, $LABEL in $WHERE (entry: ${ENTRY:-none})"
-if is_true "$(opt quiet_when_focused false)" && is_focused; then
+# A banner for something you are already looking at is noise, so a finished turn
+# stays quiet while its app is in front.
+#
+# Only a finished turn. "Needs you" and "stopped on an error" are never
+# suppressed: those are the ones where missing it costs you something, and the
+# check is app-level rather than window-level, so it cannot tell your three
+# VS Code windows apart. macOS will not give up window titles without Screen
+# Recording permission, which is far too much to ask of a notifier. Guessing
+# wrong in the quiet direction is only acceptable when nothing is waiting on you.
+if [ "$MODE" = stop ] && is_true "$(opt quiet_when_focused true)" && is_focused; then
     log "skipped, $WHERE is frontmost ($LABEL)"
     exit 0
 fi

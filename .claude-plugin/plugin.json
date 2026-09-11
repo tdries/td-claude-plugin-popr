@@ -1,7 +1,7 @@
 {
   "name": "popr",
   "displayName": "POPR",
-  "version": "1.6.1",
+  "version": "1.7.0",
   "description": "Hear and see a clickable macOS notification when a Claude Code session finishes, needs your input, or hits an error. Click it to jump back to the right window.",
   "author": {
     "name": "Tim Dries",
@@ -50,9 +50,9 @@
     },
     "quiet_when_focused": {
       "type": "boolean",
-      "title": "Quiet when the editor is in front",
-      "description": "Skip the alert when the target app is already frontmost.",
-      "default": false
+      "title": "Quiet while you are looking at it",
+      "description": "Stay quiet about a finished turn while its app is already in front, since you can see it. Never applies to a prompt waiting on you or an error.",
+      "default": true
     },
     "app": {
       "type": "string",
