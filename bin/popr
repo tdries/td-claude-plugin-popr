@@ -19,7 +19,7 @@
 # See `popr help` for the keys.
 
 set -u
-VERSION="1.7.0"
+VERSION="1.7.1"
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:${PATH:-}"
 
 MODE="${1:-stop}"
@@ -719,6 +719,18 @@ doctor() {
     fi
     if is_true "$(opt native false)"; then
         printf '  %-20s %s\n' "native notif" "also posting to Notification Center"
+    fi
+    # Default-on suppression has to be visible here, or "why did I get no
+    # banner?" has no answer in the one place built to answer it.
+    if is_true "$(opt quiet_when_focused true)"; then
+        if is_focused; then
+            printf '  %-20s %s\n' "quiet when watched" "on · $WHERE IS in front, so a finished turn would stay quiet"
+        else
+            printf '  %-20s %s\n' "quiet when watched" "on · $WHERE is not in front, so a finished turn would show"
+        fi
+        printf '  %-20s %s\n' "" "(never applies to a prompt waiting on you, or an error)"
+    else
+        printf '  %-20s %s\n' "quiet when watched" "off, every turn shows a banner"
     fi
     printf '  %-20s %s\n' "log" "$LOG_FILE"
     has jq || echo "  fix: brew install jq"

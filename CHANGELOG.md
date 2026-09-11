@@ -3,6 +3,11 @@
 All notable changes to POPR. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [SemVer](https://semver.org/).
 
+## [1.7.1] - 2026-09-11
+
+### Added
+- `popr doctor` reports whether quiet-when-watched is on and whether the app is in front right now. A default-on behaviour that suppresses banners has to be visible in the one command built to answer "why did I get no banner?".
+
 ## [1.7.0] - 2026-09-11
 
 ### Changed
