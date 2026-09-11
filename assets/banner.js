@@ -31,7 +31,18 @@ var PITCH = 40;      // vertical distance between stacked banners
 // so the mark reads as closer to the border than it measures.
 var TEXT_NUDGE = -3;
 var MARK_NUDGE = 3;
-var state = { clicked: false };
+var state = { clicked: false, deadline: null };
+
+// Ending NSApp's event loop. stop() is only noticed when the next event is
+// processed, so post one to make sure it is noticed straight away.
+function stopApp() {
+    var app = $.NSApplication.sharedApplication;
+    app.stop(null);
+    app.postEventAtStart(
+        $.NSEvent.otherEventWithTypeLocationModifierFlagsTimestampWindowNumberContextSubtypeData1Data2(
+            $.NSEventTypeApplicationDefined, $.NSMakePoint(0, 0), 0, 0, 0, $(), 0, 0, 0),
+        true);
+}
 
 // The burst is drawn here rather than played from a GIF, which is what lets
 // every project have its own. Colours are POPR's explosion palette.
@@ -127,6 +138,16 @@ function markFor(dna, size) {
     return chips;
 }
 
+// Carries the backstop deadline. performSelector:afterDelay: needs an object
+// with a method to call, and this is the smallest one that will do.
+ObjC.registerSubclass({
+    name: 'PoprDeadline',
+    superclass: 'NSObject',
+    methods: {
+        'timeUp': { types: ['void', []], implementation: function () { stopApp(); } },
+    },
+});
+
 function screenUnderPointer() {
     var mouse = $.NSEvent.mouseLocation;
     var screens = $.NSScreen.screens;
@@ -171,13 +192,19 @@ ObjC.registerSubclass({
     name: 'PoprClickCatcher',
     superclass: 'NSView',
     methods: {
+        // Without this every click is swallowed. A click into a window that is
+        // not key is treated as "first mouse" and consumed to activate it, and
+        // NSView refuses those by default. A non-activating panel never becomes
+        // key, so every click it ever receives is a first-mouse click.
+        'acceptsFirstMouse:': {
+            types: ['bool', ['id']],
+            implementation: function () { return true; },
+        },
         'mouseDown:': {
             types: ['void', ['id']],
             implementation: function () {
                 state.clicked = true;
-                // Break the run loop immediately rather than waiting for the
-                // next poll, so dismissal is instant however lazily we tick.
-                $.CFRunLoopStop($.CFRunLoopGetCurrent);
+                stopApp();
             },
         },
     },
@@ -253,7 +280,8 @@ function run(argv) {
     var dna = argv[8] || '';                       // project slug; '' means no burst
     var burstSize = parseInt(argv[9] || '90', 10);
 
-    $.NSApplication.sharedApplication.setActivationPolicy(2);
+    var app = $.NSApplication.sharedApplication;
+    app.setActivationPolicy(2);
 
     var dark = style === 'glass';
     // One line, always. Half the height it used to be: a status bar, not a card.
@@ -435,18 +463,20 @@ function run(argv) {
         bw.close;
     }
 
-    // Stay put until clicked. maxSeconds is only a backstop so a forgotten
-    // banner cannot leave a process running for the rest of the session.
+    // Stay put until clicked. Hand control to NSApp's own event loop.
     //
-    // Waking twenty times a second to ask "clicked yet?" cost about 2% of a core
-    // per open banner, which is absurd for a thing that is doing nothing. The
-    // click handler stops the run loop itself, so this can idle in long blocks:
-    // the wake is a backstop for the deadline, not the click.
-    var waited = 0, CHUNK = 5;
-    while (!state.clicked && waited < maxSeconds) {
-        tick(Math.min(CHUNK, maxSeconds - waited));
-        waited += CHUNK;
-    }
+    // Mouse events reach a window through NSApplication's event queue, and
+    // NSRunLoop.runUntilDate does not drain it — it only services run-loop
+    // sources. So the banner drew perfectly and mouseDown: never fired once,
+    // however correctly it was attached. Pumping the queue by hand and calling
+    // sendEvent instead killed the process outright. [NSApp run] is the path
+    // that works; the click handler and the deadline both stop it.
+    //
+    // It is fully event driven, so an idle banner costs no measurable CPU.
+    state.deadline = $.PoprDeadline.alloc.init;
+    state.deadline.performSelectorWithObjectAfterDelay(
+        $.NSSelectorFromString('timeUp'), $(), maxSeconds);
+    app.run;
 
     for (i = n; i >= 0; i--) { win.setAlphaValue(i / n); tick(0.008); }
     win.close;

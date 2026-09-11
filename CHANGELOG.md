@@ -3,6 +3,19 @@
 All notable changes to POPR. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [SemVer](https://semver.org/).
 
+## [1.6.1] - 2026-09-11
+
+### Fixed
+- **Clicking a banner did nothing.** Click to return to the window is the reason POPR exists, and it had been broken since 1.3.0 replaced macOS notifications with our own windows. Three separate faults, each hiding the next:
+
+  1. `NSView` refuses "first mouse" clicks by default. macOS treats a click into a non-key window as a request to activate it, and POPR's panel is deliberately non-activating so it never steals focus — so every click it ever received was a first-mouse click, and every one was discarded.
+  2. Even with that fixed, `mouseDown:` still never fired. Mouse events reach a window through NSApplication's event queue, and `NSRunLoop.runUntilDate` does not drain it; it only services run-loop sources. The banner drew perfectly and was never sent a single event.
+  3. Draining the queue by hand and calling `sendEvent` killed the process outright, so the banner stopped appearing at all.
+
+  The wait is now `[NSApp run]`, which dispatches events properly, ended by the click handler or a timed stop. Still fully event driven, so an idle banner costs no measurable CPU.
+
+  Only the third fault announced itself. The first two were completely silent, which is the failure mode this codebase keeps producing — and why the awkward-input test asserts the banner returns `clicked` or `timeout` rather than merely not crashing: that assertion catches exactly the third fault.
+
 ## [1.6.0] - 2026-09-10
 
 ### Fixed

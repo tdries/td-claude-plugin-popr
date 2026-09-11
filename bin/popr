@@ -19,7 +19,7 @@
 # See `popr help` for the keys.
 
 set -u
-VERSION="1.6.0"
+VERSION="1.6.1"
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:${PATH:-}"
 
 MODE="${1:-stop}"

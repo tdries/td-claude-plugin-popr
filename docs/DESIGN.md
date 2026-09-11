@@ -215,11 +215,12 @@ Native notifications are off by default (`native`), and `banner=false` falls bac
 to them if someone wants Notification Center history, Focus handling, or a
 machine where `osascript` is unavailable.
 
-**Two JXA traps**, both of which cost real time and are commented at the top of
+**Three JXA traps**, all of which cost real time and are commented in
 `assets/banner.js` so they are not rediscovered:
 
 1. `someNSColor.CGColor` returns a pointer owned by a temporary. The first use survives by luck and the *second* crashes the process with no error, no output, and no stack. Nothing in that file touches `CGColor`; `NSBox` takes `NSColor` directly.
 2. `addSubview` on an `NSBox` goes into its `contentView`, which is inset by `contentViewMargins`. Every child then sits shifted by an amount that appears in no coordinate you wrote. The root is a plain `NSView` with the box as its first subview.
+3. `NSRunLoop.runUntilDate` does not dispatch mouse events. They arrive through NSApplication's event queue, which only `[NSApp run]` drains. A window that looks perfect can therefore never receive a click, and draining the queue by hand and calling `sendEvent` kills the process. The wait is `[NSApp run]`, ended by the click handler or a timed stop — which also needs `acceptsFirstMouse:` on the catcher, because a non-activating panel never becomes key and every click it sees is a first-mouse click.
 
 Title and status are budgeted rather than concatenated: on one fixed line a long
 monorepo name would clip the status away, and the status is why the banner

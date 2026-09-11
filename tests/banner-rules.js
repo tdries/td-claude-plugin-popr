@@ -62,6 +62,14 @@ function run(argv) {
     check(JSON.stringify(markFor('popr', ICON)) !== JSON.stringify(markFor('acme-widgets', ICON)),
           'two different projects produced identical marks');
 
+    // The banner is a non-activating panel, so it never becomes key, so every
+    // click it receives is a "first mouse" click. NSView refuses those by
+    // default, which silently ate every click until this was added. Assert the
+    // behaviour rather than the presence of the method.
+    var catcher = $.PoprClickCatcher.alloc.initWithFrame($.NSMakeRect(0, 0, 10, 10));
+    check(catcher.acceptsFirstMouse(null) === true,
+          'the click catcher refuses first-mouse clicks, so nothing is clickable');
+
     return failures.length ? 'FAIL\n  ' + failures.join('\n  ')
-                           : 'ok (' + names.length + ' project names)';
+                           : 'ok (' + names.length + ' project names, click catcher live)';
 }
