@@ -1,3 +1,6 @@
+<!-- coffee -->
+☕ **Think I deserve a coffee for all the hard work I put into this? [Buy me one, you silly!](https://ko-fi.com/thank_you_so_much_i_love_you) 🙂**
+
 <div align="center">
 
 <img src="assets/logo-animated.svg" width="120" height="120" alt="POPR">
@@ -286,3 +289,8 @@ to anyone else.
 ## License
 
 MIT © [Tim Dries](https://github.com/tdries)
+
+---
+
+<!-- coffee -->
+☕ **Think I deserve a coffee for all the hard work I put into this? [Buy me one, you silly!](https://ko-fi.com/thank_you_so_much_i_love_you) 🙂**
